@@ -18,6 +18,8 @@ export default function Home() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transcriptStatus, setTranscriptStatus] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
 
   // ─── Function 1: Fetch Channel ───
   const handleFetchChannel = async (channelUrl: string, maxVideos: number) => {
@@ -135,6 +137,41 @@ export default function Home() {
     downloadCsv(csv, "transcripts.csv");
   };
 
+  // ─── Download Videos via yt-dlp ───
+  const handleDownloadVideos = async () => {
+    if (selectedVideoUrls.length === 0) {
+      setError("Selecione pelo menos um vídeo para baixar.");
+      return;
+    }
+
+    setError(null);
+    setIsDownloading(true);
+    setDownloadStatus(`Baixando ${selectedVideoUrls.length} vídeo(s)... isso pode levar alguns minutos`);
+
+    try {
+      const res = await fetch("/api/download-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoUrls: selectedVideoUrls }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Erro ao baixar vídeos.");
+        setDownloadStatus(null);
+        return;
+      }
+
+      setDownloadStatus(data.message);
+    } catch {
+      setError("Erro de rede ao baixar vídeos.");
+      setDownloadStatus(null);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <main className="container">
       <h1>🎵 TikTok Scraper & Transcript Tool</h1>
@@ -183,10 +220,32 @@ export default function Home() {
               {isTranscribing ? "Baixando..." : "📝 Capturar transcrição dos vídeos"}
             </button>
 
+            <button
+              className="btn btn-download"
+              onClick={handleDownloadVideos}
+              disabled={isDownloading || selectedVideoUrls.length === 0}
+            >
+              {isDownloading ? "Baixando..." : "⬇️ Baixar vídeos selecionados"}
+            </button>
+
             {transcriptRows.length > 0 && (
               <CsvDownloadButton label="Download | Transcrição dos vídeos | CSV" onClick={handleDownloadTranscriptCsv} />
             )}
           </div>
+        </div>
+      )}
+
+      {/* ─── Download Video Status ─── */}
+      {isDownloading && downloadStatus && (
+        <div className="loading">
+          <div className="spinner" />
+          {downloadStatus}
+        </div>
+      )}
+
+      {!isDownloading && downloadStatus && (
+        <div className="transcript-summary">
+          {downloadStatus}
         </div>
       )}
 
