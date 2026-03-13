@@ -253,7 +253,7 @@ h1 {
 }
 
 .table-scroll {
-  overflow-x: auto;
+  overflow-x: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
@@ -281,6 +281,15 @@ th {
   letter-spacing: 0.5px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
+}
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+th.sortable:hover {
+  color: var(--primary);
 }
 
 td {
@@ -368,6 +377,17 @@ tbody tr:last-child td {
 /* ─── Failed Row ─── */
 .row-failed {
   background: var(--danger-bg);
+}
+
+/* ─── Transcript Summary ─── */
+.transcript-summary {
+  padding: 0.8rem 1rem;
+  background: rgba(0, 212, 170, 0.1);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  color: var(--primary);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
 }
 
 .badge-failed {

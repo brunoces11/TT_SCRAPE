@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { runActorAndGetResults } from "@/lib/apify";
 import { normalizeChannelVideos } from "@/lib/normalize";
 
+// Allow up to 5 minutes for channel actor to finish
+export const maxDuration = 300;
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();

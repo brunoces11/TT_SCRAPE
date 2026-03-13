@@ -17,6 +17,7 @@ export default function Home() {
   const [isFetchingChannel, setIsFetchingChannel] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [transcriptStatus, setTranscriptStatus] = useState<string | null>(null);
 
   // ─── Function 1: Fetch Channel ───
   const handleFetchChannel = async (channelUrl: string, maxVideos: number) => {
@@ -58,8 +59,11 @@ export default function Home() {
     setError(null);
     setIsTranscribing(true);
     setTranscriptRows([]);
+    setTranscriptStatus(`Enviando ${selectedVideoUrls.length} vídeo(s) para transcrição...`);
 
     try {
+      setTranscriptStatus(`Aguardando transcrição de ${selectedVideoUrls.length} vídeo(s)... isso pode levar alguns minutos`);
+
       const res = await fetch("/api/transcribe-videos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -70,13 +74,19 @@ export default function Home() {
 
       if (!res.ok) {
         setError(data.error || "Erro ao buscar transcrições.");
+        setTranscriptStatus(null);
         return;
       }
 
       const normalized = normalizeTranscripts(data.rawItems || [], channelRows);
       setTranscriptRows(normalized);
+
+      const ok = normalized.filter((r) => r.transcriptStatus === "ok").length;
+      const failed = normalized.filter((r) => r.transcriptStatus === "failed").length;
+      setTranscriptStatus(`Concluído: ${ok} transcrição(ões) com sucesso, ${failed} falha(s) — de ${normalized.length} vídeo(s)`);
     } catch {
-      setError("Erro de rede ao conectar com o servidor.");
+      setError("Erro de rede ao conectar com o servidor. A transcrição pode demorar mais que o esperado — tente novamente.");
+      setTranscriptStatus(null);
     } finally {
       setIsTranscribing(false);
     }
@@ -88,7 +98,10 @@ export default function Home() {
       "video_title", "views", "description", "likes",
       "hashtags", "video_id", "video_url", "comments", "publish_date",
     ];
-    const rows = channelRows.map((r) => ({
+    const source = selectedVideoUrls.length > 0
+      ? channelRows.filter((r) => selectedVideoUrls.includes(r.videoUrl))
+      : channelRows;
+    const rows = source.map((r) => ({
       video_title: r.title,
       views: r.views,
       description: r.description,
@@ -145,17 +158,10 @@ export default function Home() {
         </div>
       )}
 
-      {/* ─── Channel Results Table ─── */}
-      <VideoResultsTable
-        rows={channelRows}
-        selectedVideoUrls={selectedVideoUrls}
-        onSelectionChange={setSelectedVideoUrls}
-      />
-
-      {/* ─── Channel CSV + Transcript Button ─── */}
+      {/* ─── Action Bar (all buttons) ─── */}
       {channelRows.length > 0 && (
         <div className="action-bar">
-          <CsvDownloadButton label="Download CSV" onClick={handleDownloadChannelCsv} />
+          <CsvDownloadButton label="Download | Lista de vídeos | CSV" onClick={handleDownloadChannelCsv} />
 
           <div className="transcript-actions">
             <select
@@ -174,29 +180,40 @@ export default function Home() {
               onClick={handleTranscribe}
               disabled={isTranscribing || selectedVideoUrls.length === 0}
             >
-              {isTranscribing ? "Baixando..." : "📝 Baixar transcrição dos vídeos"}
+              {isTranscribing ? "Baixando..." : "📝 Capturar transcrição dos vídeos"}
             </button>
+
+            {transcriptRows.length > 0 && (
+              <CsvDownloadButton label="Download | Transcrição dos vídeos | CSV" onClick={handleDownloadTranscriptCsv} />
+            )}
           </div>
         </div>
       )}
 
       {/* ─── Transcribing Loading ─── */}
-      {isTranscribing && (
+      {isTranscribing && transcriptStatus && (
         <div className="loading">
           <div className="spinner" />
-          Baixando transcrições... isso pode levar alguns minutos
+          {transcriptStatus}
         </div>
       )}
+
+      {/* ─── Transcript Status Summary ─── */}
+      {!isTranscribing && transcriptStatus && transcriptRows.length > 0 && (
+        <div className="transcript-summary">
+          {transcriptStatus}
+        </div>
+      )}
+
+      {/* ─── Channel Results Table ─── */}
+      <VideoResultsTable
+        rows={channelRows}
+        selectedVideoUrls={selectedVideoUrls}
+        onSelectionChange={setSelectedVideoUrls}
+      />
 
       {/* ─── Transcript Results Table ─── */}
       <TranscriptResultsTable rows={transcriptRows} />
-
-      {/* ─── Transcript CSV ─── */}
-      {transcriptRows.length > 0 && (
-        <div className="action-bar">
-          <CsvDownloadButton label="Download CSV com transcrição" onClick={handleDownloadTranscriptCsv} />
-        </div>
-      )}
     </main>
   );
 }

@@ -12,8 +12,11 @@ export async function runActorAndGetResults(
   actorId: string,
   input: Record<string, unknown>
 ): Promise<unknown[]> {
+  // Apify API uses ~ instead of / in actor IDs (e.g. apidojo~tiktok-scraper)
+  const actorIdForUrl = actorId.replace("/", "~");
+
   // 1. Start the actor run with waitForFinish=120
-  const runUrl = `${BASE_URL}/acts/${actorId}/runs?token=${APIFY_TOKEN}&waitForFinish=120`;
+  const runUrl = `${BASE_URL}/acts/${actorIdForUrl}/runs?token=${APIFY_TOKEN}&waitForFinish=120`;
 
   const runResponse = await fetch(runUrl, {
     method: "POST",
@@ -28,7 +31,6 @@ export async function runActorAndGetResults(
 
   let runData = await runResponse.json();
   const runId = runData.data?.id;
-  const actorIdEncoded = encodeURIComponent(actorId);
 
   if (!runId) {
     throw new Error("Apify did not return a run ID");
@@ -44,7 +46,7 @@ export async function runActorAndGetResults(
 
     await sleep(POLL_INTERVAL_MS);
 
-    const pollUrl = `${BASE_URL}/acts/${actorIdEncoded}/runs/${runId}?token=${APIFY_TOKEN}`;
+    const pollUrl = `${BASE_URL}/acts/${actorIdForUrl}/runs/${runId}?token=${APIFY_TOKEN}`;
     const pollResponse = await fetch(pollUrl);
 
     if (!pollResponse.ok) {
