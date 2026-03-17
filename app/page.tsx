@@ -44,6 +44,7 @@ export default function Home() {
       }
 
       setChannelRows(data.rows || []);
+      setSelectedVideoUrls((data.rows || []).map((r: ChannelVideoRow) => r.videoUrl));
     } catch {
       setError("Erro de rede ao conectar com o servidor.");
     } finally {
@@ -152,7 +153,13 @@ export default function Home() {
       const res = await fetch("/api/download-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoUrls: selectedVideoUrls }),
+        body: JSON.stringify({
+          videoUrls: selectedVideoUrls,
+          titles: selectedVideoUrls.map((url) => {
+            const row = channelRows.find((r) => r.videoUrl === url);
+            return row?.title || "";
+          }),
+        }),
       });
 
       const data = await res.json();

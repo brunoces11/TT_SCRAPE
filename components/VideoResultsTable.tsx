@@ -19,7 +19,7 @@ export default function VideoResultsTable({
   selectedVideoUrls,
   onSelectionChange,
 }: VideoResultsTableProps) {
-  const [sortKey, setSortKey] = useState<SortKey>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("views");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const sortedRows = useMemo(() => {
