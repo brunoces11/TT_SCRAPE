@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runActorAndGetResults } from "@/lib/apify";
 import { normalizeChannelVideos } from "@/lib/normalize";
-import { buildSearchLabel, saveSearchToXls } from "@/lib/xls";
+import { buildSearchLabel, saveSearchToXls, getBlacklist } from "@/lib/xls";
 
 export const maxDuration = 300;
 
@@ -51,7 +51,11 @@ export async function POST(request: NextRequest) {
     }
 
     const rawItems = await runActorAndGetResults(actorId, input);
-    const rows = normalizeChannelVideos(rawItems);
+    const allRows = normalizeChannelVideos(rawItems);
+
+    // Filter out blacklisted videos
+    const blacklist = getBlacklist();
+    const rows = allRows.filter((r) => !blacklist.has(r.videoUrl));
 
     // Sort by views descending
     rows.sort((a, b) => b.views - a.views);

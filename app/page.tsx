@@ -21,6 +21,7 @@ export default function Home() {
   const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [detailLogs, setDetailLogs] = useState<string[]>([]);
+  const [currentXlsFile, setCurrentXlsFile] = useState<string>("");
 
   // ─── Function 1: Fetch Channel ───
   const handleFetchChannel = async (params: SearchParams) => {
@@ -47,6 +48,7 @@ export default function Home() {
 
       setChannelRows(data.rows || []);
       setSelectedVideoUrls((data.rows || []).map((r: ChannelVideoRow) => r.videoUrl));
+      if (data.savedFile) setCurrentXlsFile(data.savedFile);
     } catch {
       setError("Erro de rede ao conectar com o servidor.");
     } finally {
@@ -210,6 +212,38 @@ export default function Home() {
     setIsDownloadingAll(false);
   };
 
+  // ─── Delete selected rows from UI + XLSX ───
+  const handleDeleteSelected = async () => {
+    if (selectedVideoUrls.length === 0) {
+      setError("Selecione pelo menos um vídeo para deletar.");
+      return;
+    }
+
+    // Remove from UI immediately
+    const remaining = channelRows.filter((r) => !selectedVideoUrls.includes(r.videoUrl));
+    setChannelRows(remaining);
+    setSelectedVideoUrls([]);
+
+    // Remove from XLSX if we have a file reference
+    if (currentXlsFile) {
+      try {
+        const res = await fetch("/api/saved-searches", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: currentXlsFile, videoUrls: selectedVideoUrls }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setDetailLogs((prev) => [...prev, `🗑️ ${data.message}`]);
+        } else {
+          setDetailLogs((prev) => [...prev, `❌ Erro ao deletar do XLSX: ${data.error}`]);
+        }
+      } catch {
+        setDetailLogs((prev) => [...prev, `❌ Erro de rede ao deletar do XLSX`]);
+      }
+    }
+  };
+
   return (
     <main className="container">
       <h1>🎵 TikTok Scraper & Transcript Tool</h1>
@@ -259,6 +293,14 @@ export default function Home() {
               disabled={isDownloadingAll || isTranscribing || isDownloading || selectedVideoUrls.length === 0}
             >
               {isDownloadingAll ? "Baixando tudo..." : "📦 Baixar tudo"}
+            </button>
+
+            <button
+              className="btn btn-delete"
+              onClick={handleDeleteSelected}
+              disabled={selectedVideoUrls.length === 0}
+            >
+              🗑️ Deletar selecionados
             </button>
           </div>
         </div>
@@ -321,7 +363,7 @@ export default function Home() {
       <TranscriptResultsTable rows={transcriptRows} />
 
       {/* ─── Saved Searches ─── */}
-      <SavedSearches onLoad={(rows) => {
+      <SavedSearches onLoad={(rows, filename) => {
         const mapped: ChannelVideoRow[] = rows.map((r: Record<string, unknown>) => ({
           title: String(r.video_title || ""),
           views: Number(r.views) || 0,
@@ -340,6 +382,7 @@ export default function Home() {
         setTranscriptStatus(null);
         setDownloadStatus(null);
         setDetailLogs([]);
+        if (filename) setCurrentXlsFile(filename);
       }} />
     </main>
   );

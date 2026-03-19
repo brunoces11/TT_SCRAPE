@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 type SavedSearch = { filename: string; label: string };
 
 type SavedSearchesProps = {
-  onLoad: (rows: Record<string, unknown>[]) => void;
+  onLoad: (rows: Record<string, unknown>[], filename: string) => void;
 };
 
 export default function SavedSearches({ onLoad }: SavedSearchesProps) {
@@ -26,9 +26,9 @@ export default function SavedSearches({ onLoad }: SavedSearchesProps) {
     try {
       const res = await fetch(`/api/saved-searches?file=${encodeURIComponent(selected)}`);
       const data = await res.json();
-      onLoad(data.rows || []);
+      onLoad(data.rows || [], selected);
     } catch {
-      onLoad([]);
+      onLoad([], "");
     } finally {
       setLoading(false);
     }
