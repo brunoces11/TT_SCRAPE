@@ -299,7 +299,7 @@ h1 {
 }
 
 .table-scroll {
-  overflow-x: hidden;
+  overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
@@ -336,6 +336,24 @@ th.sortable {
 
 th.sortable:hover {
   color: var(--primary);
+}
+
+th.resizable {
+  position: relative;
+}
+
+.resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.resize-handle:hover {
+  background: var(--primary);
 }
 
 td {
@@ -445,6 +463,18 @@ tbody tr:last-child td {
   padding: 0.15rem 0.5rem;
   border-radius: 4px;
   text-transform: uppercase;
+}
+
+.saved-searches {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border);
+}
+
+.saved-search-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
 }
 
 /* ─── Responsive ─── */

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runActorAndGetResults } from "@/lib/apify";
 import { normalizeChannelVideos } from "@/lib/normalize";
+import { buildSearchLabel, saveSearchToXls } from "@/lib/xls";
 
 export const maxDuration = 300;
 
@@ -55,7 +56,26 @@ export async function POST(request: NextRequest) {
     // Sort by views descending
     rows.sort((a, b) => b.views - a.views);
 
-    return NextResponse.json({ rows });
+    // Auto-save to XLS
+    let savedFile = "";
+    try {
+      const label = buildSearchLabel({ channelUrl, keyword, hashtag });
+      const xlsRows = rows.map((r) => ({
+        video_title: r.title,
+        views: r.views,
+        description: r.description,
+        likes: r.likes,
+        hashtags: r.hashtags.join(", "),
+        video_url: r.videoUrl,
+        comments: r.comments ?? "",
+        publish_date: r.publishDate ?? "",
+      }));
+      savedFile = saveSearchToXls(label, xlsRows);
+    } catch (xlsErr) {
+      console.error("Erro ao salvar XLS:", xlsErr);
+    }
+
+    return NextResponse.json({ rows, savedFile });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Erro desconhecido";
 

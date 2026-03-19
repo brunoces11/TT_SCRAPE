@@ -6,6 +6,7 @@ import type { SearchParams } from "@/components/ChannelForm";
 import VideoResultsTable from "@/components/VideoResultsTable";
 import TranscriptResultsTable from "@/components/TranscriptResultsTable";
 import CsvDownloadButton from "@/components/CsvDownloadButton";
+import SavedSearches from "@/components/SavedSearches";
 import { ChannelVideoRow, TranscriptRow } from "@/types";
 import { normalizeTranscripts } from "@/lib/normalize";
 import { generateCsvString, downloadCsv } from "@/lib/csv";
@@ -281,6 +282,27 @@ export default function Home() {
 
       {/* ─── Transcript Results Table ─── */}
       <TranscriptResultsTable rows={transcriptRows} />
+
+      {/* ─── Saved Searches ─── */}
+      <SavedSearches onLoad={(rows) => {
+        const mapped: ChannelVideoRow[] = rows.map((r: Record<string, unknown>) => ({
+          title: String(r.video_title || ""),
+          views: Number(r.views) || 0,
+          description: String(r.description || ""),
+          likes: Number(r.likes) || 0,
+          hashtags: String(r.hashtags || "").split(", ").filter(Boolean),
+          videoId: String(r.video_url || "").match(/\/video\/(\d+)/)?.[1] || "",
+          videoUrl: String(r.video_url || ""),
+          comments: Number(r.comments) || 0,
+          publishDate: String(r.publish_date || ""),
+        }));
+        mapped.sort((a, b) => b.views - a.views);
+        setChannelRows(mapped);
+        setSelectedVideoUrls(mapped.map((r) => r.videoUrl));
+        setTranscriptRows([]);
+        setTranscriptStatus(null);
+        setDownloadStatus(null);
+      }} />
     </main>
   );
 }
