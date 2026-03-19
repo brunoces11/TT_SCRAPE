@@ -204,6 +204,18 @@ h1 {
   box-shadow: 0 4px 15px rgba(0, 184, 148, 0.4);
 }
 
+.btn-download-all {
+  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  color: #fff;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+}
+
+.btn-download-all:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(108, 92, 231, 0.4);
+}
+
 /* ─── Action Bar ─── */
 .action-bar {
   display: flex;

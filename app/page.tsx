@@ -5,11 +5,9 @@ import ChannelForm from "@/components/ChannelForm";
 import type { SearchParams } from "@/components/ChannelForm";
 import VideoResultsTable from "@/components/VideoResultsTable";
 import TranscriptResultsTable from "@/components/TranscriptResultsTable";
-import CsvDownloadButton from "@/components/CsvDownloadButton";
 import SavedSearches from "@/components/SavedSearches";
 import { ChannelVideoRow, TranscriptRow } from "@/types";
 import { normalizeTranscripts } from "@/lib/normalize";
-import { generateCsvString, downloadCsv } from "@/lib/csv";
 
 export default function Home() {
   const [channelRows, setChannelRows] = useState<ChannelVideoRow[]>([]);
@@ -22,6 +20,7 @@ export default function Home() {
   const [transcriptStatus, setTranscriptStatus] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
 
   // ─── Function 1: Fetch Channel ───
   const handleFetchChannel = async (params: SearchParams) => {
@@ -54,7 +53,14 @@ export default function Home() {
     }
   };
 
-  // ─── Function 2: Fetch Transcripts ───
+  // ─── Helper: get titles for selected URLs ───
+  const getSelectedTitles = () =>
+    selectedVideoUrls.map((url) => {
+      const row = channelRows.find((r) => r.videoUrl === url);
+      return row?.title || "";
+    });
+
+  // ─── Function 2: Fetch Transcripts + save .txt ───
   const handleTranscribe = async () => {
     if (selectedVideoUrls.length === 0) {
       setError("Selecione pelo menos um vídeo.");
@@ -64,15 +70,17 @@ export default function Home() {
     setError(null);
     setIsTranscribing(true);
     setTranscriptRows([]);
-    setTranscriptStatus(`Enviando ${selectedVideoUrls.length} vídeo(s) para transcrição...`);
+    setTranscriptStatus(`Aguardando transcrição de ${selectedVideoUrls.length} vídeo(s)... isso pode levar alguns minutos`);
 
     try {
-      setTranscriptStatus(`Aguardando transcrição de ${selectedVideoUrls.length} vídeo(s)... isso pode levar alguns minutos`);
-
       const res = await fetch("/api/transcribe-videos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoUrls: selectedVideoUrls, language: transcriptLanguage }),
+        body: JSON.stringify({
+          videoUrls: selectedVideoUrls,
+          language: transcriptLanguage,
+          titles: getSelectedTitles(),
+        }),
       });
 
       const data = await res.json();
@@ -86,58 +94,30 @@ export default function Home() {
       const normalized = normalizeTranscripts(data.rawItems || [], channelRows);
       setTranscriptRows(normalized);
 
+      // Debug logs
+      if (data.debugLogs) {
+        console.log("=== TRANSCRIPT DEBUG LOGS ===");
+        data.debugLogs.forEach((log: string) => console.log(log));
+      }
+      if (data.errors?.length > 0) {
+        console.log("=== TRANSCRIPT ERRORS ===", data.errors);
+      }
+
       const ok = normalized.filter((r) => r.transcriptStatus === "ok").length;
       const failed = normalized.filter((r) => r.transcriptStatus === "failed").length;
-      setTranscriptStatus(`Concluído: ${ok} transcrição(ões) com sucesso, ${failed} falha(s) — de ${normalized.length} vídeo(s)`);
+      const saved = data.savedFiles?.length || 0;
+      const noTranscript = failed;
+      let statusMsg = `Concluído: ${ok} transcrição(ões) com sucesso, ${failed} falha(s) — ${saved} arquivo(s) .txt salvo(s) em /downloads`;
+      if (saved === 0 && noTranscript > 0) {
+        statusMsg += ` ⚠️ Nenhum vídeo selecionado possui transcrição disponível (vídeos sem fala/legenda)`;
+      }
+      setTranscriptStatus(statusMsg);
     } catch {
       setError("Erro de rede ao conectar com o servidor. A transcrição pode demorar mais que o esperado — tente novamente.");
       setTranscriptStatus(null);
     } finally {
       setIsTranscribing(false);
     }
-  };
-
-  // ─── CSV Downloads ───
-  const handleDownloadChannelCsv = () => {
-    const columns = [
-      "video_title", "views", "description", "likes",
-      "hashtags", "video_id", "video_url", "comments", "publish_date",
-    ];
-    const source = selectedVideoUrls.length > 0
-      ? channelRows.filter((r) => selectedVideoUrls.includes(r.videoUrl))
-      : channelRows;
-    const rows = source.map((r) => ({
-      video_title: r.title,
-      views: r.views,
-      description: r.description,
-      likes: r.likes,
-      hashtags: r.hashtags.join(", "),
-      video_id: r.videoId,
-      video_url: r.videoUrl,
-      comments: r.comments ?? "",
-      publish_date: r.publishDate ?? "",
-    }));
-    const csv = generateCsvString(columns, rows);
-    downloadCsv(csv, "channel_videos.csv");
-  };
-
-  const handleDownloadTranscriptCsv = () => {
-    const columns = [
-      "video_title", "views", "description", "likes",
-      "hashtags", "video_id", "video_url", "transcript",
-    ];
-    const rows = transcriptRows.map((r) => ({
-      video_title: r.title,
-      views: r.views,
-      description: r.description,
-      likes: r.likes,
-      hashtags: r.hashtags.join(", "),
-      video_id: r.videoId,
-      video_url: r.videoUrl,
-      transcript: r.transcript,
-    }));
-    const csv = generateCsvString(columns, rows);
-    downloadCsv(csv, "transcripts.csv");
   };
 
   // ─── Download Videos via yt-dlp ───
@@ -157,10 +137,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           videoUrls: selectedVideoUrls,
-          titles: selectedVideoUrls.map((url) => {
-            const row = channelRows.find((r) => r.videoUrl === url);
-            return row?.title || "";
-          }),
+          titles: getSelectedTitles(),
         }),
       });
 
@@ -179,6 +156,25 @@ export default function Home() {
     } finally {
       setIsDownloading(false);
     }
+  };
+
+  // ─── Download All (transcripts + videos) ───
+  const handleDownloadAll = async () => {
+    if (selectedVideoUrls.length === 0) {
+      setError("Selecione pelo menos um vídeo.");
+      return;
+    }
+
+    setIsDownloadingAll(true);
+    setError(null);
+
+    // Step 1: Transcripts
+    await handleTranscribe();
+
+    // Step 2: Videos
+    await handleDownloadVideos();
+
+    setIsDownloadingAll(false);
   };
 
   return (
@@ -207,8 +203,6 @@ export default function Home() {
       {/* ─── Action Bar (all buttons) ─── */}
       {channelRows.length > 0 && (
         <div className="action-bar">
-          <CsvDownloadButton label="Download | Lista de vídeos | CSV" onClick={handleDownloadChannelCsv} />
-
           <div className="transcript-actions">
             <select
               value={transcriptLanguage}
@@ -226,7 +220,7 @@ export default function Home() {
               onClick={handleTranscribe}
               disabled={isTranscribing || selectedVideoUrls.length === 0}
             >
-              {isTranscribing ? "Baixando..." : "📝 Capturar transcrição dos vídeos"}
+              {isTranscribing ? "Baixando..." : "📝 Baixar Transcrição"}
             </button>
 
             <button
@@ -237,9 +231,13 @@ export default function Home() {
               {isDownloading ? "Baixando..." : "⬇️ Baixar vídeos selecionados"}
             </button>
 
-            {transcriptRows.length > 0 && (
-              <CsvDownloadButton label="Download | Transcrição dos vídeos | CSV" onClick={handleDownloadTranscriptCsv} />
-            )}
+            <button
+              className="btn btn-download-all"
+              onClick={handleDownloadAll}
+              disabled={isDownloadingAll || isTranscribing || isDownloading || selectedVideoUrls.length === 0}
+            >
+              {isDownloadingAll ? "Baixando tudo..." : "📦 Baixar tudo"}
+            </button>
           </div>
         </div>
       )}

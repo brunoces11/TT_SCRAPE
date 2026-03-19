@@ -114,35 +114,35 @@ export default function VideoResultsTable({
               <th className="col-checkbox" style={{ width: 40 }}>
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} title="Selecionar todos" />
               </th>
-              <th className="sortable resizable" onClick={() => handleSort("title")} style={{ width: 200 }}>
-                Título{sortIndicator("title")}
+              <th className="sortable resizable" onClick={() => handleSort("publishDate")} style={{ width: 80 }}>
+                Data{sortIndicator("publishDate")}
                 <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 1)} />
               </th>
               <th className="col-number sortable resizable" onClick={() => handleSort("views")} style={{ width: 90 }}>
                 Views{sortIndicator("views")}
                 <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 2)} />
               </th>
-              <th className="sortable resizable" onClick={() => handleSort("description")} style={{ width: 250 }}>
-                Descrição{sortIndicator("description")}
-                <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 3)} />
-              </th>
               <th className="col-number sortable resizable" onClick={() => handleSort("likes")} style={{ width: 80 }}>
                 Likes{sortIndicator("likes")}
+                <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 3)} />
+              </th>
+              <th className="col-number sortable resizable" onClick={() => handleSort("comments")} style={{ width: 80 }}>
+                💬{sortIndicator("comments")}
                 <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 4)} />
+              </th>
+              <th className="sortable resizable" onClick={() => handleSort("title")} style={{ width: 200 }}>
+                Título{sortIndicator("title")}
+                <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 5)} />
+              </th>
+              <th className="sortable resizable" onClick={() => handleSort("description")} style={{ width: 250 }}>
+                Descrição{sortIndicator("description")}
+                <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 6)} />
               </th>
               <th className="sortable resizable" onClick={() => handleSort("hashtags")} style={{ width: 150 }}>
                 #{sortIndicator("hashtags")}
-                <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 5)} />
-              </th>
-              <th style={{ width: 50 }}>URL</th>
-              <th className="col-number sortable resizable" onClick={() => handleSort("comments")} style={{ width: 100 }}>
-                💬{sortIndicator("comments")}
                 <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 7)} />
               </th>
-              <th className="sortable resizable" onClick={() => handleSort("publishDate")} style={{ width: 80 }}>
-                Data{sortIndicator("publishDate")}
-                <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 8)} />
-              </th>
+              <th style={{ width: 50 }}>URL</th>
             </tr>
           </thead>
           <tbody>
@@ -151,18 +151,18 @@ export default function VideoResultsTable({
                 <td className="col-checkbox">
                   <input type="checkbox" checked={selectedVideoUrls.includes(row.videoUrl)} onChange={() => toggleRow(row.videoUrl)} />
                 </td>
-                <td className="col-title" title={row.title}>{row.title}</td>
+                <td className="col-date">{formatDate(row.publishDate)}</td>
                 <td className="col-number">{row.views.toLocaleString("pt-BR")}</td>
+                <td className="col-number">{row.likes.toLocaleString("pt-BR")}</td>
+                <td className="col-number">{row.comments?.toLocaleString("pt-BR") ?? "—"}</td>
+                <td className="col-title" title={row.title}>{row.title}</td>
                 <td className="col-desc" title={row.description}>
                   {row.description.substring(0, 100)}{row.description.length > 100 ? "..." : ""}
                 </td>
-                <td className="col-number">{row.likes.toLocaleString("pt-BR")}</td>
                 <td className="col-hashtags">{row.hashtags.join(", ")}</td>
                 <td className="col-url">
                   <a href={row.videoUrl} target="_blank" rel="noopener noreferrer">Link</a>
                 </td>
-                <td className="col-number">{row.comments?.toLocaleString("pt-BR") ?? "—"}</td>
-                <td className="col-date">{formatDate(row.publishDate)}</td>
               </tr>
             ))}
           </tbody>
