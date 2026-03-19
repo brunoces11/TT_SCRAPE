@@ -489,6 +489,50 @@ tbody tr:last-child td {
   align-items: center;
 }
 
+/* ─── Detail Logs ─── */
+.detail-logs {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+  font-size: 0.78rem;
+  font-family: monospace;
+}
+
+.detail-logs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 0.82rem;
+}
+
+.detail-logs-body {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 0.5rem 0.75rem;
+}
+
+.log-line {
+  padding: 0.15rem 0;
+  word-break: break-all;
+}
+
+.log-error {
+  color: var(--danger);
+}
+
+.log-success {
+  color: var(--primary);
+}
+
+.log-info {
+  color: var(--text-muted);
+}
+
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
   .form-row {

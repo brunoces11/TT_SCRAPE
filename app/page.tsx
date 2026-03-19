@@ -12,7 +12,6 @@ import { normalizeTranscripts } from "@/lib/normalize";
 export default function Home() {
   const [channelRows, setChannelRows] = useState<ChannelVideoRow[]>([]);
   const [selectedVideoUrls, setSelectedVideoUrls] = useState<string[]>([]);
-  const [transcriptLanguage, setTranscriptLanguage] = useState("pt");
   const [transcriptRows, setTranscriptRows] = useState<TranscriptRow[]>([]);
   const [isFetchingChannel, setIsFetchingChannel] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -21,6 +20,7 @@ export default function Home() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
+  const [detailLogs, setDetailLogs] = useState<string[]>([]);
 
   // ─── Function 1: Fetch Channel ───
   const handleFetchChannel = async (params: SearchParams) => {
@@ -29,6 +29,7 @@ export default function Home() {
     setChannelRows([]);
     setSelectedVideoUrls([]);
     setTranscriptRows([]);
+    setDetailLogs([]);
 
     try {
       const res = await fetch("/api/fetch-channel", {
@@ -53,11 +54,20 @@ export default function Home() {
     }
   };
 
-  // ─── Helper: get titles for selected URLs ───
-  const getSelectedTitles = () =>
+  // ─── Helper: get metadata for selected URLs ───
+  const getSelectedMeta = () =>
     selectedVideoUrls.map((url) => {
       const row = channelRows.find((r) => r.videoUrl === url);
-      return row?.title || "";
+      return {
+        title: row?.title || "",
+        views: row?.views || 0,
+        likes: row?.likes || 0,
+        comments: row?.comments || 0,
+        description: row?.description || "",
+        hashtags: row?.hashtags?.join(", ") || "",
+        videoUrl: url,
+        publishDate: row?.publishDate || "",
+      };
     });
 
   // ─── Function 2: Fetch Transcripts + save .txt ───
@@ -70,6 +80,7 @@ export default function Home() {
     setError(null);
     setIsTranscribing(true);
     setTranscriptRows([]);
+    setDetailLogs([]);
     setTranscriptStatus(`Aguardando transcrição de ${selectedVideoUrls.length} vídeo(s)... isso pode levar alguns minutos`);
 
     try {
@@ -78,8 +89,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           videoUrls: selectedVideoUrls,
-          language: transcriptLanguage,
-          titles: getSelectedTitles(),
+          videosMeta: getSelectedMeta(),
         }),
       });
 
@@ -87,6 +97,7 @@ export default function Home() {
 
       if (!res.ok) {
         setError(data.error || "Erro ao buscar transcrições.");
+        if (data.debugLogs) setDetailLogs(data.debugLogs);
         setTranscriptStatus(null);
         return;
       }
@@ -94,26 +105,30 @@ export default function Home() {
       const normalized = normalizeTranscripts(data.rawItems || [], channelRows);
       setTranscriptRows(normalized);
 
-      // Debug logs
+      // Collect logs for UI display
+      const logs: string[] = [];
       if (data.debugLogs) {
-        console.log("=== TRANSCRIPT DEBUG LOGS ===");
-        data.debugLogs.forEach((log: string) => console.log(log));
+        const relevant = (data.debugLogs as string[]).filter(
+          (l: string) => l.includes("SKIP") || l.includes("ERROR") || l.includes("SAVED") || l.includes("RESULT") || l.includes("hasTranscript")
+        );
+        logs.push(...relevant);
       }
       if (data.errors?.length > 0) {
-        console.log("=== TRANSCRIPT ERRORS ===", data.errors);
+        logs.push(...(data.errors as string[]).map((e: string) => `❌ ${e}`));
       }
+      setDetailLogs(logs);
 
       const ok = normalized.filter((r) => r.transcriptStatus === "ok").length;
       const failed = normalized.filter((r) => r.transcriptStatus === "failed").length;
       const saved = data.savedFiles?.length || 0;
-      const noTranscript = failed;
       let statusMsg = `Concluído: ${ok} transcrição(ões) com sucesso, ${failed} falha(s) — ${saved} arquivo(s) .txt salvo(s) em /downloads`;
-      if (saved === 0 && noTranscript > 0) {
+      if (saved === 0 && failed > 0) {
         statusMsg += ` ⚠️ Nenhum vídeo selecionado possui transcrição disponível (vídeos sem fala/legenda)`;
       }
       setTranscriptStatus(statusMsg);
-    } catch {
-      setError("Erro de rede ao conectar com o servidor. A transcrição pode demorar mais que o esperado — tente novamente.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro desconhecido";
+      setError(`Erro de rede: ${msg}`);
       setTranscriptStatus(null);
     } finally {
       setIsTranscribing(false);
@@ -137,7 +152,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           videoUrls: selectedVideoUrls,
-          titles: getSelectedTitles(),
+          titles: getSelectedMeta().map((m) => m.title),
         }),
       });
 
@@ -149,16 +164,25 @@ export default function Home() {
         return;
       }
 
+      // Show per-video results in logs
+      if (data.results) {
+        const dlLogs = (data.results as { url: string; status: string; filename?: string; error?: string }[]).map(
+          (r) => r.status === "ok" ? `✅ ${r.filename}` : `❌ ${r.url.substring(0, 60)} — ${r.error}`
+        );
+        setDetailLogs((prev) => [...prev, ...dlLogs]);
+      }
+
       setDownloadStatus(data.message);
-    } catch {
-      setError("Erro de rede ao baixar vídeos.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro desconhecido";
+      setError(`Erro de rede ao baixar vídeos: ${msg}`);
       setDownloadStatus(null);
     } finally {
       setIsDownloading(false);
     }
   };
 
-  // ─── Download All (transcripts + videos) ───
+  // ─── Download All (transcripts + videos) — resiliente ───
   const handleDownloadAll = async () => {
     if (selectedVideoUrls.length === 0) {
       setError("Selecione pelo menos um vídeo.");
@@ -167,12 +191,21 @@ export default function Home() {
 
     setIsDownloadingAll(true);
     setError(null);
+    setDetailLogs([]);
 
-    // Step 1: Transcripts
-    await handleTranscribe();
+    // Step 1: Transcripts (errors won't block step 2)
+    try {
+      await handleTranscribe();
+    } catch {
+      // continue even if transcription fails
+    }
 
-    // Step 2: Videos
-    await handleDownloadVideos();
+    // Step 2: Videos (always runs)
+    try {
+      await handleDownloadVideos();
+    } catch {
+      // continue
+    }
 
     setIsDownloadingAll(false);
   };
@@ -204,17 +237,6 @@ export default function Home() {
       {channelRows.length > 0 && (
         <div className="action-bar">
           <div className="transcript-actions">
-            <select
-              value={transcriptLanguage}
-              onChange={(e) => setTranscriptLanguage(e.target.value)}
-              className="language-select"
-              disabled={isTranscribing}
-            >
-              <option value="pt">Português</option>
-              <option value="en">English</option>
-              <option value="es">Español</option>
-            </select>
-
             <button
               className="btn btn-transcript"
               onClick={handleTranscribe}
@@ -265,9 +287,26 @@ export default function Home() {
       )}
 
       {/* ─── Transcript Status Summary ─── */}
-      {!isTranscribing && transcriptStatus && transcriptRows.length > 0 && (
+      {!isTranscribing && transcriptStatus && (
         <div className="transcript-summary">
           {transcriptStatus}
+        </div>
+      )}
+
+      {/* ─── Detail Logs (visible in UI) ─── */}
+      {detailLogs.length > 0 && (
+        <div className="detail-logs">
+          <div className="detail-logs-header">
+            <span>📋 Log de execução ({detailLogs.length} eventos)</span>
+            <button onClick={() => setDetailLogs([])} className="error-dismiss">✕</button>
+          </div>
+          <div className="detail-logs-body">
+            {detailLogs.map((log, i) => (
+              <div key={i} className={`log-line ${log.includes("❌") || log.includes("ERROR") ? "log-error" : log.includes("✅") || log.includes("SAVED") ? "log-success" : "log-info"}`}>
+                {log}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -300,6 +339,7 @@ export default function Home() {
         setTranscriptRows([]);
         setTranscriptStatus(null);
         setDownloadStatus(null);
+        setDetailLogs([]);
       }} />
     </main>
   );
