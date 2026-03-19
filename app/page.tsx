@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ChannelForm from "@/components/ChannelForm";
+import type { SearchParams } from "@/components/ChannelForm";
 import VideoResultsTable from "@/components/VideoResultsTable";
 import TranscriptResultsTable from "@/components/TranscriptResultsTable";
 import CsvDownloadButton from "@/components/CsvDownloadButton";
@@ -22,7 +23,7 @@ export default function Home() {
   const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
 
   // ─── Function 1: Fetch Channel ───
-  const handleFetchChannel = async (channelUrl: string, maxVideos: number) => {
+  const handleFetchChannel = async (params: SearchParams) => {
     setError(null);
     setIsFetchingChannel(true);
     setChannelRows([]);
@@ -33,13 +34,13 @@ export default function Home() {
       const res = await fetch("/api/fetch-channel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channelUrl, resultsPerPage: maxVideos }),
+        body: JSON.stringify(params),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Erro ao buscar dados do canal.");
+        setError(data.error || "Erro ao buscar dados.");
         return;
       }
 

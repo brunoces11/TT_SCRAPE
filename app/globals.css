@@ -84,6 +84,40 @@ h1 {
   flex: 1;
 }
 
+.form-group-keyword {
+  flex: 1;
+}
+
+.form-group-hashtag {
+  flex: 1;
+}
+
+.form-group-country {
+  width: 160px;
+}
+
+.country-select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  color: var(--text);
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+  width: 100%;
+}
+
+.country-select:focus {
+  border-color: var(--primary);
+}
+
+.form-hint {
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
 .form-group-max {
   width: 120px;
 }
