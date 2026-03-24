@@ -61,7 +61,12 @@ export async function POST(req: NextRequest) {
         const finalPath = path.join(DOWNLOAD_DIR, `${safeName}.mp4`);
 
         // Step 2: Convert to H.264 with ffmpeg
-        const ffmpegCmd = `ffmpeg -y -i "${tempPath}" -c:v libx264 -preset fast -crf 23 -c:a aac -movflags +faststart "${finalPath}"`;
+        // - strip metadata (-map_metadata -1)
+        // - pixel shift 1% (scale+crop)
+        // - minimal noise (noise alls=3)
+        // - 1% slower (setpts=1.01*PTS + atempo=0.99)
+        // - audio pitch shift 1% (asetrate+aresample)
+        const ffmpegCmd = `ffmpeg -y -i "${tempPath}" -map_metadata -1 -vf "scale=iw*1.01:ih*1.01,crop=iw/1.01:ih/1.01,noise=alls=3:allf=t,setpts=1.01*PTS" -af "atempo=0.99,asetrate=44100*1.01,aresample=44100" -c:v libx264 -preset fast -crf 23 -c:a aac -movflags +faststart "${finalPath}"`;
         await execAsync(ffmpegCmd, { timeout: 300000 });
 
         // Remove temp file
