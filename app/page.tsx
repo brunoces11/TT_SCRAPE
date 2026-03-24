@@ -22,10 +22,14 @@ export default function Home() {
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [detailLogs, setDetailLogs] = useState<string[]>([]);
   const [currentXlsFile, setCurrentXlsFile] = useState<string>("");
+  const [singleVideoUrl, setSingleVideoUrl] = useState("");
+  const [singleVideoError, setSingleVideoError] = useState<string | null>(null);
 
   // ─── Function 1: Fetch Channel ───
   const handleFetchChannel = async (params: SearchParams) => {
     setError(null);
+    setSingleVideoUrl("");
+    setSingleVideoError(null);
     setIsFetchingChannel(true);
     setChannelRows([]);
     setSelectedVideoUrls([]);
@@ -244,6 +248,40 @@ export default function Home() {
     }
   };
 
+  const TIKTOK_VIDEO_REGEX = /tiktok\.com\/@[\w.-]+\/video\/(\d+)/;
+
+  const handleSingleVideoSubmit = () => {
+    setSingleVideoError(null);
+    const match = singleVideoUrl.trim().match(TIKTOK_VIDEO_REGEX);
+    if (!match) {
+      setSingleVideoError("URL inválida. Use o formato: https://www.tiktok.com/@usuario/video/1234567890");
+      return;
+    }
+    const videoId = match[1];
+    const url = singleVideoUrl.trim();
+
+    // Limpa estado anterior
+    setTranscriptRows([]);
+    setTranscriptStatus(null);
+    setDownloadStatus(null);
+    setDetailLogs([]);
+    setError(null);
+
+    // Cria ChannelVideoRow sintético
+    const row: ChannelVideoRow = {
+      videoId,
+      title: `Video ${videoId}`,
+      description: "",
+      views: 0,
+      likes: 0,
+      hashtags: [],
+      videoUrl: url,
+    };
+
+    setChannelRows([row]);
+    setSelectedVideoUrls([url]);
+  };
+
   return (
     <main className="container">
       <h1>🎵 TikTok Scraper & Transcript Tool</h1>
@@ -251,6 +289,28 @@ export default function Home() {
 
       {/* ─── Channel Form ─── */}
       <ChannelForm onSubmit={handleFetchChannel} isLoading={isFetchingChannel} />
+
+      {/* ─── Single Video URL ─── */}
+      <div className="single-video-section">
+        <div className="single-video-row">
+          <input
+            type="text"
+            placeholder="Cole aqui a URL de um vídeo do TikTok"
+            value={singleVideoUrl}
+            onChange={(e) => { setSingleVideoUrl(e.target.value); setSingleVideoError(null); }}
+            disabled={isFetchingChannel}
+            onKeyDown={(e) => { if (e.key === "Enter") handleSingleVideoSubmit(); }}
+          />
+          <button
+            className="btn btn-primary"
+            onClick={handleSingleVideoSubmit}
+            disabled={!singleVideoUrl.trim() || isFetchingChannel}
+          >
+            🎬 Carregar vídeo
+          </button>
+        </div>
+        {singleVideoError && <div className="single-video-error">{singleVideoError}</div>}
+      </div>
 
       {/* ─── Loading / Error ─── */}
       {isFetchingChannel && (
