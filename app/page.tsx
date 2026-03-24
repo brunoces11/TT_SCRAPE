@@ -108,6 +108,13 @@ export default function Home() {
         return;
       }
 
+      // Handle Apify actor failure (returned as 200 with actorFailed flag)
+      if (data.actorFailed) {
+        setTranscriptStatus("⚠️ O serviço de transcrição falhou ao processar o(s) vídeo(s) — pode ser vídeo privado, removido ou incompatível");
+        if (data.debugLogs) setDetailLogs(data.debugLogs);
+        return;
+      }
+
       const normalized = normalizeTranscripts(data.rawItems || [], channelRows);
       setTranscriptRows(normalized);
 
@@ -124,12 +131,21 @@ export default function Home() {
       }
       setDetailLogs(logs);
 
-      const ok = normalized.filter((r) => r.transcriptStatus === "ok").length;
-      const failed = normalized.filter((r) => r.transcriptStatus === "failed").length;
       const saved = data.savedFiles?.length || 0;
-      let statusMsg = `Concluído: ${ok} transcrição(ões) com sucesso, ${failed} falha(s) — ${saved} arquivo(s) .txt salvo(s) em /downloads`;
-      if (saved === 0 && failed > 0) {
-        statusMsg += ` ⚠️ Nenhum vídeo selecionado possui transcrição disponível (vídeos sem fala/legenda)`;
+      const noTranscript = data.noTranscript?.length || 0;
+      const errorCount = data.errors?.length || 0;
+      const total = selectedVideoUrls.length;
+
+      // Build clear status message
+      const parts: string[] = [];
+      if (saved > 0) parts.push(`✅ ${saved} transcrição(ões) baixada(s)`);
+      if (noTranscript > 0) parts.push(`📭 ${noTranscript} sem transcrição disponível`);
+      if (errorCount > 0) parts.push(`❌ ${errorCount} erro(s)`);
+
+      let statusMsg = `Concluído (${total} vídeo(s)): ${parts.join(" · ")}`;
+      if (saved > 0) statusMsg += ` — arquivo(s) .txt salvo(s) em /downloads`;
+      if (saved === 0 && noTranscript > 0 && errorCount === 0) {
+        statusMsg += ` — nenhum vídeo possui transcrição disponível (sem fala/legenda detectada)`;
       }
       setTranscriptStatus(statusMsg);
     } catch (err) {

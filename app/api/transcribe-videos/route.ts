@@ -98,6 +98,7 @@ export async function POST(request: NextRequest) {
 
     const savedFiles: string[] = [];
     const errors: string[] = [];
+    const noTranscript: string[] = []; // URLs sem transcrição disponível
 
     for (let ri = 0; ri < rawItems.length; ri++) {
       const item = rawItems[ri] as Record<string, string>;
@@ -109,6 +110,7 @@ export async function POST(request: NextRequest) {
 
         if (!transcript) {
           debugLogs.push(`[ITEM ${ri}] SKIP: no transcript (message=${item.message || "none"})`);
+          noTranscript.push(itemUrl || videoUrls[ri] || `video ${ri}`);
           continue;
         }
 
@@ -126,18 +128,21 @@ export async function POST(request: NextRequest) {
 
         if (!meta || !meta.title) {
           debugLogs.push(`[ITEM ${ri}] SKIP: no meta/title found`);
+          noTranscript.push(itemUrl || videoUrls[ri] || `video ${ri}`);
           continue;
         }
 
         const cleaned = cleanWebVtt(transcript);
         if (!cleaned.trim()) {
           debugLogs.push(`[ITEM ${ri}] SKIP: cleaned transcript empty`);
+          noTranscript.push(itemUrl || videoUrls[ri] || `video ${ri}`);
           continue;
         }
 
         const safeName = sanitizeFilename(meta.title);
         if (!safeName) {
           debugLogs.push(`[ITEM ${ri}] SKIP: sanitized name empty`);
+          noTranscript.push(itemUrl || videoUrls[ri] || `video ${ri}`);
           continue;
         }
 
@@ -153,10 +158,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    debugLogs.push(`[RESULT] savedFiles=${savedFiles.length}, errors=${errors.length}`);
-    return NextResponse.json({ rawItems, savedFiles, errors, debugLogs, downloadDir: DOWNLOAD_DIR });
+    debugLogs.push(`[RESULT] savedFiles=${savedFiles.length}, noTranscript=${noTranscript.length}, errors=${errors.length}`);
+    return NextResponse.json({ rawItems, savedFiles, errors, noTranscript, debugLogs, downloadDir: DOWNLOAD_DIR });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Erro desconhecido";
+    // Distinguish Apify actor failure from other errors
+    if (msg.includes("Actor run failed")) {
+      return NextResponse.json({
+        error: null,
+        actorFailed: true,
+        actorError: msg,
+        rawItems: [],
+        savedFiles: [],
+        errors: [msg],
+        noTranscript: [],
+        debugLogs: [`[APIFY] ${msg}`],
+        downloadDir: DOWNLOAD_DIR,
+      });
+    }
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
