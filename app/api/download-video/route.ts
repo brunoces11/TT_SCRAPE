@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     const { videoUrls, titles, mode } = await req.json();
 
     if (!Array.isArray(videoUrls) || videoUrls.length === 0) {
-      return NextResponse.json({ error: "Nenhuma URL fornecida." }, { status: 400 });
+      return NextResponse.json({ error: "No URL provided." }, { status: 400 });
     }
 
     if (!fs.existsSync(DOWNLOAD_DIR)) {
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
         const tempFound = files.find((f) => f.startsWith(`${videoId}_temp`));
 
         if (!tempFound) {
-          results.push({ url, status: "failed", error: "Arquivo não encontrado após download" });
+          results.push({ url, status: "failed", error: "File not found after download" });
           continue;
         }
 
@@ -87,8 +87,8 @@ export async function POST(req: NextRequest) {
               await execAsync(ffmpegCmd, { timeout: 300000 });
               results.push({ url, status: "ok", filename: `${safeName}_${variantLabel}.mp4`, variant: variantLabel });
             } catch (varErr: unknown) {
-              const varMsg = varErr instanceof Error ? varErr.message : "Erro desconhecido";
-              console.error(`Erro ao gerar variante ${variantLabel} para ${safeName}:`, varMsg);
+              const varMsg = varErr instanceof Error ? varErr.message : "Unknown error";
+              console.error(`Error generating variant ${variantLabel} for ${safeName}:`, varMsg);
               results.push({ url, status: "failed", error: varMsg, variant: variantLabel });
             }
           }
@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
           results.push({ url, status: "ok", filename: `${safeName}.mp4` });
         }
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Erro desconhecido";
+        const msg = err instanceof Error ? err.message : "Unknown error";
         results.push({ url, status: "failed", error: msg });
       }
     }
@@ -127,11 +127,11 @@ export async function POST(req: NextRequest) {
     const failed = results.filter((r) => r.status === "failed").length;
 
     return NextResponse.json({
-      message: `Download concluído: ${ok} com sucesso, ${failed} falha(s). Pasta: ${DOWNLOAD_DIR}`,
+      message: `Download completed: ${ok} succeeded, ${failed} failure(s). Folder: ${DOWNLOAD_DIR}`,
       downloadDir: DOWNLOAD_DIR,
       results,
     });
   } catch {
-    return NextResponse.json({ error: "Erro interno no servidor." }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error." }, { status: 500 });
   }
 }

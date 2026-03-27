@@ -41,9 +41,9 @@ interface VideoMeta {
 function buildTxtContent(meta: VideoMeta, transcript: string): string {
   return `Title: ${meta.title}
 
-Views: ${meta.views.toLocaleString("pt-BR")}
+Views: ${meta.views.toLocaleString("en-US")}
 
-Likes: ${meta.likes.toLocaleString("pt-BR")}
+Likes: ${meta.likes.toLocaleString("en-US")}
 
 Description: ${meta.description}
 
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     debugLogs.push(`[INPUT] videoUrls count: ${videoUrls?.length}, videosMeta count: ${videosMeta?.length}`);
 
     if (!Array.isArray(videoUrls) || videoUrls.length === 0) {
-      return NextResponse.json({ error: "Selecione pelo menos um vídeo." }, { status: 400 });
+      return NextResponse.json({ error: "Select at least one video." }, { status: 400 });
     }
 
     const actorId = process.env.APIFY_TRANSCRIPT_ACTOR_ID || "sociavault/tiktok-transcript-scraper";
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
     debugLogs.push(`[RESULT] savedFiles=${savedFiles.length}, noTranscript=${noTranscript.length}, errors=${errors.length}`);
     return NextResponse.json({ rawItems, savedFiles, errors, noTranscript, debugLogs, downloadDir: DOWNLOAD_DIR });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Erro desconhecido";
+    const msg = err instanceof Error ? err.message : "Unknown error";
     // Distinguish Apify actor failure from other errors
     if (msg.includes("Actor run failed")) {
       return NextResponse.json({
@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
         savedFiles: [],
         errors: [msg],
         noTranscript: [],
-        debugLogs: [`❌ [TRANSCRIÇÃO] Serviço Apify falhou: ${msg}`],
+        debugLogs: [`❌ [TRANSCRIPT] Apify service failed: ${msg}`],
         downloadDir: DOWNLOAD_DIR,
       });
     }

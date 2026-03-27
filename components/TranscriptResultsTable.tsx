@@ -72,14 +72,14 @@ export default function TranscriptResultsTable({ rows }: TranscriptResultsTableP
 
   return (
     <div className="table-container">
-      <h2>Transcrições ({rows.length} vídeos)</h2>
+      <h2>Transcripts ({rows.length} videos)</h2>
       <div className="table-scroll">
         <table ref={tableRef} style={{ tableLayout: "fixed" }}>
           <thead>
             <tr>
               <th style={{ width: 50 }}>URL</th>
               <th className="sortable resizable" onClick={() => handleSort("title")} style={{ width: 200 }}>
-                Título{sortIndicator("title")}
+                Title{sortIndicator("title")}
                 <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 1)} />
               </th>
               <th className="col-number sortable resizable" onClick={() => handleSort("views")} style={{ width: 90 }}>
@@ -95,11 +95,11 @@ export default function TranscriptResultsTable({ rows }: TranscriptResultsTableP
                 <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 4)} />
               </th>
               <th className="sortable resizable" onClick={() => handleSort("description")} style={{ width: 200 }}>
-                Descrição{sortIndicator("description")}
+                Description{sortIndicator("description")}
                 <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 5)} />
               </th>
               <th className="sortable resizable" onClick={() => handleSort("transcriptStatus")} style={{ width: 300 }}>
-                Transcrição{sortIndicator("transcriptStatus")}
+                Transcript{sortIndicator("transcriptStatus")}
                 <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 6)} />
               </th>
             </tr>
@@ -111,15 +111,15 @@ export default function TranscriptResultsTable({ rows }: TranscriptResultsTableP
                   <a href={row.videoUrl} target="_blank" rel="noopener noreferrer">Link</a>
                 </td>
                 <td className="col-title" title={row.title}>{row.title}</td>
-                <td className="col-number">{row.views.toLocaleString("pt-BR")}</td>
-                <td className="col-number">{row.likes.toLocaleString("pt-BR")}</td>
+                <td className="col-number">{row.views.toLocaleString("en-US")}</td>
+                <td className="col-number">{row.likes.toLocaleString("en-US")}</td>
                 <td className="col-hashtags">{row.hashtags.join(", ")}</td>
                 <td className="col-desc" title={row.description}>
                   {row.description.substring(0, 100)}{row.description.length > 100 ? "..." : ""}
                 </td>
                 <td className="col-transcript">
                   {row.transcriptStatus === "failed" ? (
-                    <span className="badge-failed">FALHOU</span>
+                    <span className="badge-failed">FAILED</span>
                   ) : (
                     <span title={row.transcript}>
                       {row.transcript.substring(0, 200)}{row.transcript.length > 200 ? "..." : ""}

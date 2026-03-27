@@ -106,13 +106,13 @@ export default function VideoResultsTable({
 
   return (
     <div className="table-container">
-      <h2>Resultados ({rows.length} vídeos)</h2>
+      <h2>Results ({rows.length} videos)</h2>
       <div className="table-scroll">
         <table ref={tableRef} style={{ tableLayout: "fixed" }}>
           <thead>
             <tr>
               <th className="col-checkbox" style={{ width: 40 }}>
-                <input type="checkbox" checked={allSelected} onChange={toggleAll} title="Selecionar todos" />
+                <input type="checkbox" checked={allSelected} onChange={toggleAll} title="Select all" />
               </th>
               <th className="sortable resizable" onClick={() => handleSort("publishDate")} style={{ width: 80 }}>
                 Data{sortIndicator("publishDate")}
@@ -131,11 +131,11 @@ export default function VideoResultsTable({
                 <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 4)} />
               </th>
               <th className="sortable resizable" onClick={() => handleSort("title")} style={{ width: 200 }}>
-                Título{sortIndicator("title")}
+                Title{sortIndicator("title")}
                 <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 5)} />
               </th>
               <th className="sortable resizable" onClick={() => handleSort("description")} style={{ width: 250 }}>
-                Descrição{sortIndicator("description")}
+                Description{sortIndicator("description")}
                 <span className="resize-handle" onMouseDown={(e) => handleMouseDown(e, 6)} />
               </th>
               <th className="sortable resizable" onClick={() => handleSort("hashtags")} style={{ width: 150 }}>
@@ -152,9 +152,9 @@ export default function VideoResultsTable({
                   <input type="checkbox" checked={selectedVideoUrls.includes(row.videoUrl)} onChange={() => toggleRow(row.videoUrl)} />
                 </td>
                 <td className="col-date">{formatDate(row.publishDate)}</td>
-                <td className="col-number">{row.views.toLocaleString("pt-BR")}</td>
-                <td className="col-number">{row.likes.toLocaleString("pt-BR")}</td>
-                <td className="col-number">{row.comments?.toLocaleString("pt-BR") ?? "—"}</td>
+                <td className="col-number">{row.views.toLocaleString("en-US")}</td>
+                <td className="col-number">{row.likes.toLocaleString("en-US")}</td>
+                <td className="col-number">{row.comments?.toLocaleString("en-US") ?? "—"}</td>
                 <td className="col-title" title={row.title}>{row.title}</td>
                 <td className="col-desc" title={row.description}>
                   {row.description.substring(0, 100)}{row.description.length > 100 ? "..." : ""}

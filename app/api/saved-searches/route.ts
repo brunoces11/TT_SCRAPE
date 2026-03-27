@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     const searches = listSavedSearches();
     return NextResponse.json({ searches });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Erro desconhecido";
+    const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
@@ -23,14 +23,14 @@ export async function DELETE(req: NextRequest) {
     const { filename, videoUrls } = await req.json();
 
     if (!filename || !Array.isArray(videoUrls) || videoUrls.length === 0) {
-      return NextResponse.json({ error: "Parâmetros inválidos." }, { status: 400 });
+      return NextResponse.json({ error: "Invalid parameters." }, { status: 400 });
     }
 
     const deleted = deleteRowsFromXls(filename, videoUrls);
     addToBlacklist(videoUrls);
-    return NextResponse.json({ deleted, message: `${deleted} registro(s) removido(s) do XLSX e adicionado(s) à blacklist.` });
+    return NextResponse.json({ deleted, message: `${deleted} record(s) removed from XLSX and added to blacklist.` });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Erro desconhecido";
+    const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

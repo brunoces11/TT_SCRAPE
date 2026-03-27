@@ -38,7 +38,7 @@ export default function SavedSearches({ onLoad }: SavedSearchesProps) {
 
   return (
     <div className="saved-searches">
-      <h2>📂 Buscas Salvas</h2>
+      <h2>📂 Saved Searches</h2>
       <div className="saved-search-row">
         <select
           value={selected}
@@ -46,7 +46,7 @@ export default function SavedSearches({ onLoad }: SavedSearchesProps) {
           className="language-select"
           style={{ flex: 1 }}
         >
-          <option value="">Selecione uma busca anterior...</option>
+          <option value="">Select a previous search...</option>
           {searches.map((s) => (
             <option key={s.filename} value={s.filename}>
               {s.label} ({s.filename})
@@ -58,7 +58,7 @@ export default function SavedSearches({ onLoad }: SavedSearchesProps) {
           onClick={handleLoad}
           disabled={!selected || loading}
         >
-          {loading ? "Carregando..." : "📂 Carregar busca"}
+          {loading ? "Loading..." : "📂 Load search"}
         </button>
       </div>
     </div>

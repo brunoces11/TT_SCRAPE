@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
 
     if (!channelUrl && !keyword && !hashtag) {
       return NextResponse.json(
-        { error: "Preencha pelo menos um campo: URL do canal, palavra-chave ou hashtag." },
+        { error: "Fill in at least one field: Channel URL, keyword, or hashtag." },
         { status: 400 }
       );
     }
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       const tiktokUrlPattern = /^https?:\/\/(www\.)?tiktok\.com\/@[\w.]+\/?$/;
       if (!tiktokUrlPattern.test(channelUrl.trim())) {
         return NextResponse.json(
-          { error: "URL inválida. Use o formato: https://www.tiktok.com/@usuario" },
+          { error: "Invalid URL. Use the format: https://www.tiktok.com/@username" },
           { status: 400 }
         );
       }
@@ -76,19 +76,19 @@ export async function POST(request: NextRequest) {
       }));
       savedFile = saveSearchToXls(label, xlsRows);
     } catch (xlsErr) {
-      console.error("Erro ao salvar XLS:", xlsErr);
+      console.error("Error saving XLS:", xlsErr);
     }
 
     return NextResponse.json({ rows, savedFile });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Erro desconhecido";
+    const message = error instanceof Error ? error.message : "Unknown error";
 
     if (message.includes("TIMEOUT")) {
       return NextResponse.json({ error: message }, { status: 504 });
     }
 
     return NextResponse.json(
-      { error: `Erro ao buscar dados: ${message}` },
+      { error: `Error fetching data: ${message}` },
       { status: 500 }
     );
   }

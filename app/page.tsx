@@ -48,7 +48,7 @@ export default function Home() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Erro ao buscar dados.");
+        setError(data.error || "Error fetching data.");
         return;
       }
 
@@ -56,7 +56,7 @@ export default function Home() {
       setSelectedVideoUrls((data.rows || []).map((r: ChannelVideoRow) => r.videoUrl));
       if (data.savedFile) setCurrentXlsFile(data.savedFile);
     } catch {
-      setError("Erro de rede ao conectar com o servidor.");
+      setError("Network error connecting to server.");
     } finally {
       setIsFetchingChannel(false);
     }
@@ -81,7 +81,7 @@ export default function Home() {
   // ─── Function 2: Fetch Transcripts + save .txt ───
   const handleTranscribe = async () => {
     if (selectedVideoUrls.length === 0) {
-      setError("Selecione pelo menos um vídeo.");
+      setError("Select at least one video.");
       return;
     }
 
@@ -89,7 +89,7 @@ export default function Home() {
     setIsTranscribing(true);
     setTranscriptRows([]);
     setDetailLogs([]);
-    setTranscriptStatus(`Aguardando transcrição de ${selectedVideoUrls.length} vídeo(s)... isso pode levar alguns minutos`);
+    setTranscriptStatus(`Transcribing ${selectedVideoUrls.length} video(s)... this may take a few minutes`);
 
     try {
       const res = await fetch("/api/transcribe-videos", {
@@ -104,7 +104,7 @@ export default function Home() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Erro ao buscar transcrições.");
+        setError(data.error || "Error fetching transcripts.");
         if (data.debugLogs) setDetailLogs(data.debugLogs);
         setTranscriptStatus(null);
         return;
@@ -112,7 +112,7 @@ export default function Home() {
 
       // Handle Apify actor failure (returned as 200 with actorFailed flag)
       if (data.actorFailed) {
-        setTranscriptStatus("⚠️ O serviço de transcrição falhou ao processar o(s) vídeo(s) — pode ser vídeo privado, removido ou incompatível");
+        setTranscriptStatus("⚠️ Transcription service failed to process video(s) — may be private, removed, or unsupported");
         if (data.debugLogs) setDetailLogs(data.debugLogs);
         return;
       }
@@ -140,19 +140,19 @@ export default function Home() {
 
       // Build clear status message
       const parts: string[] = [];
-      if (saved > 0) parts.push(`✅ ${saved} transcrição(ões) baixada(s)`);
-      if (noTranscript > 0) parts.push(`📭 ${noTranscript} sem transcrição disponível`);
-      if (errorCount > 0) parts.push(`❌ ${errorCount} erro(s)`);
+      if (saved > 0) parts.push(`✅ ${saved} transcript(s) downloaded`);
+      if (noTranscript > 0) parts.push(`📭 ${noTranscript} without transcript`);
+      if (errorCount > 0) parts.push(`❌ ${errorCount} error(s)`);
 
-      let statusMsg = `Concluído (${total} vídeo(s)): ${parts.join(" · ")}`;
-      if (saved > 0) statusMsg += ` — arquivo(s) .txt salvo(s) em /downloads`;
+      let statusMsg = `Completed (${total} video(s)): ${parts.join(" · ")}`;
+      if (saved > 0) statusMsg += ` — .txt file(s) saved to /downloads`;
       if (saved === 0 && noTranscript > 0 && errorCount === 0) {
-        statusMsg += ` — nenhum vídeo possui transcrição disponível (sem fala/legenda detectada)`;
+        statusMsg += ` — no video has a transcript available (no speech/subtitles detected)`;
       }
       setTranscriptStatus(statusMsg);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
-      setError(`Erro de rede: ${msg}`);
+      setError(`Network error: ${msg}`);
       setTranscriptStatus(null);
     } finally {
       setIsTranscribing(false);
@@ -162,13 +162,13 @@ export default function Home() {
   // ─── Download Videos via yt-dlp ───
   const handleDownloadVideos = async () => {
     if (selectedVideoUrls.length === 0) {
-      setError("Selecione pelo menos um vídeo para baixar.");
+      setError("Select at least one video to download.");
       return;
     }
 
     setError(null);
     setIsDownloading(true);
-    setDownloadStatus(`Baixando ${selectedVideoUrls.length} vídeo(s)... isso pode levar alguns minutos`);
+    setDownloadStatus(`Downloading ${selectedVideoUrls.length} video(s)... this may take a few minutes`);
 
     try {
       const res = await fetch("/api/download-video", {
@@ -183,7 +183,7 @@ export default function Home() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Erro ao baixar vídeos.");
+        setError(data.error || "Error downloading videos.");
         setDownloadStatus(null);
         return;
       }
@@ -199,17 +199,17 @@ export default function Home() {
       setDownloadStatus(data.message);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
-      setError(`Erro de rede ao baixar vídeos: ${msg}`);
+      setError(`Network error downloading videos: ${msg}`);
       setDownloadStatus(null);
     } finally {
       setIsDownloading(false);
     }
   };
 
-  // ─── Download All (transcripts + videos) — resiliente ───
+  // ─── Download All (transcripts + videos) — resilient ───
   const handleDownloadAll = async () => {
     if (selectedVideoUrls.length === 0) {
-      setError("Selecione pelo menos um vídeo.");
+      setError("Select at least one video.");
       return;
     }
 
@@ -237,14 +237,14 @@ export default function Home() {
   // ─── Download All x5 (transcripts + 5 variants per video) ───
   const handleDownloadX5 = async () => {
     if (selectedVideoUrls.length === 0) {
-      setError("Selecione pelo menos um vídeo.");
+      setError("Select at least one video.");
       return;
     }
 
     setIsDownloadingX5(true);
     setError(null);
     setDetailLogs([]);
-    setDownloadX5Status(`Processando ${selectedVideoUrls.length} vídeo(s) x5... isso pode levar vários minutos`);
+    setDownloadX5Status(`Processing ${selectedVideoUrls.length} video(s) x5... this may take several minutes`);
 
     // Step 1: Transcripts (errors won't block step 2)
     try {
@@ -262,7 +262,7 @@ export default function Home() {
       const url = selectedVideoUrls[i];
       const title = meta[i]?.title || "";
 
-      setDownloadX5Status(`Processando vídeo ${i + 1} de ${selectedVideoUrls.length} (x5)...`);
+      setDownloadX5Status(`Processing video ${i + 1} of ${selectedVideoUrls.length} (x5)...`);
 
       try {
         const res = await fetch("/api/download-video", {
@@ -278,7 +278,7 @@ export default function Home() {
         const data = await res.json();
 
         if (!res.ok) {
-          setDetailLogs((prev) => [...prev, `❌ [DOWNLOAD] Vídeo ${i + 1}: ${data.error || "Erro desconhecido"}`]);
+          setDetailLogs((prev) => [...prev, `❌ [DOWNLOAD] Video ${i + 1}: ${data.error || "Unknown error"}`]);
           totalFailed++;
           continue;
         }
@@ -296,19 +296,19 @@ export default function Home() {
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Erro desconhecido";
-        setDetailLogs((prev) => [...prev, `❌ [DOWNLOAD] Vídeo ${i + 1}: Erro de rede — ${msg}`]);
+        setDetailLogs((prev) => [...prev, `❌ [DOWNLOAD] Video ${i + 1}: Network error — ${msg}`]);
         totalFailed++;
       }
     }
 
-    setDownloadX5Status(`Download x5 concluído: ${totalOk} arquivo(s) com sucesso, ${totalFailed} falha(s). Pasta: downloads/`);
+    setDownloadX5Status(`Download x5 completed: ${totalOk} file(s) succeeded, ${totalFailed} failure(s). Folder: downloads/`);
     setIsDownloadingX5(false);
   };
 
   // ─── Delete selected rows from UI + XLSX ───
   const handleDeleteSelected = async () => {
     if (selectedVideoUrls.length === 0) {
-      setError("Selecione pelo menos um vídeo para deletar.");
+      setError("Select at least one video to delete.");
       return;
     }
 
@@ -329,10 +329,10 @@ export default function Home() {
         if (res.ok) {
           setDetailLogs((prev) => [...prev, `🗑️ ${data.message}`]);
         } else {
-          setDetailLogs((prev) => [...prev, `❌ Erro ao deletar do XLSX: ${data.error}`]);
+          setDetailLogs((prev) => [...prev, `❌ Error deleting from XLSX: ${data.error}`]);
         }
       } catch {
-        setDetailLogs((prev) => [...prev, `❌ Erro de rede ao deletar do XLSX`]);
+        setDetailLogs((prev) => [...prev, `❌ Network error deleting from XLSX`]);
       }
     }
   };
@@ -343,7 +343,7 @@ export default function Home() {
     setSingleVideoError(null);
     const match = singleVideoUrl.trim().match(TIKTOK_VIDEO_REGEX);
     if (!match) {
-      setSingleVideoError("URL inválida. Use o formato: https://www.tiktok.com/@usuario/video/1234567890");
+      setSingleVideoError("Invalid URL. Use the format: https://www.tiktok.com/@username/video/1234567890");
       return;
     }
     const videoId = match[1];
@@ -374,7 +374,7 @@ export default function Home() {
   return (
     <main className="container">
       <h1>🎵 TikTok Scraper & Transcript Tool</h1>
-      <p className="subtitle">Ferramenta local de pesquisa — extraia dados e transcrições de canais do TikTok</p>
+      <p className="subtitle">Local research tool — extract data and transcripts from TikTok channels</p>
 
       {/* ─── Channel Form ─── */}
       <ChannelForm onSubmit={handleFetchChannel} isLoading={isFetchingChannel} />
@@ -384,7 +384,7 @@ export default function Home() {
         <div className="single-video-row">
           <input
             type="text"
-            placeholder="Cole aqui a URL de um vídeo do TikTok"
+            placeholder="Paste a TikTok video URL here"
             value={singleVideoUrl}
             onChange={(e) => { setSingleVideoUrl(e.target.value); setSingleVideoError(null); }}
             disabled={isFetchingChannel}
@@ -395,7 +395,7 @@ export default function Home() {
             onClick={handleSingleVideoSubmit}
             disabled={!singleVideoUrl.trim() || isFetchingChannel}
           >
-            🎬 Carregar vídeo
+            🎬 Load video
           </button>
         </div>
         {singleVideoError && <div className="single-video-error">{singleVideoError}</div>}
@@ -405,7 +405,7 @@ export default function Home() {
       {isFetchingChannel && (
         <div className="loading">
           <div className="spinner" />
-          Buscando dados do canal... isso pode levar até 2 minutos
+          Fetching channel data... this may take up to 2 minutes
         </div>
       )}
 
@@ -425,7 +425,7 @@ export default function Home() {
               onClick={handleTranscribe}
               disabled={isTranscribing || isDownloadingX5 || selectedVideoUrls.length === 0}
             >
-              {isTranscribing ? "Baixando..." : "📝 Baixar Transcrição"}
+              {isTranscribing ? "Downloading..." : "📝 Download Transcript"}
             </button>
 
             <button
@@ -433,7 +433,7 @@ export default function Home() {
               onClick={handleDownloadVideos}
               disabled={isDownloading || isDownloadingX5 || selectedVideoUrls.length === 0}
             >
-              {isDownloading ? "Baixando..." : "⬇️ Baixar vídeos selecionados"}
+              {isDownloading ? "Downloading..." : "⬇️ Download selected videos"}
             </button>
 
             <button
@@ -441,7 +441,7 @@ export default function Home() {
               onClick={handleDownloadAll}
               disabled={isDownloadingAll || isTranscribing || isDownloading || isDownloadingX5 || selectedVideoUrls.length === 0}
             >
-              {isDownloadingAll ? "Baixando tudo..." : "📦 Baixar tudo"}
+              {isDownloadingAll ? "Downloading all..." : "📦 Download all"}
             </button>
 
             <button
@@ -449,7 +449,7 @@ export default function Home() {
               onClick={handleDownloadX5}
               disabled={isDownloadingX5 || isDownloadingAll || isTranscribing || isDownloading || selectedVideoUrls.length === 0}
             >
-              {isDownloadingX5 ? "Baixando x5..." : "🔥 Baixar tudo x5"}
+              {isDownloadingX5 ? "Downloading x5..." : "🔥 Download all x5"}
             </button>
 
             <button
@@ -457,7 +457,7 @@ export default function Home() {
               onClick={handleDeleteSelected}
               disabled={selectedVideoUrls.length === 0}
             >
-              🗑️ Deletar selecionados
+              🗑️ Delete selected
             </button>
           </div>
         </div>
@@ -510,7 +510,7 @@ export default function Home() {
       {detailLogs.length > 0 && (
         <div className="detail-logs">
           <div className="detail-logs-header">
-            <span>📋 Log de execução ({detailLogs.length} eventos)</span>
+            <span>📋 Execution log ({detailLogs.length} events)</span>
             <button onClick={() => setDetailLogs([])} className="error-dismiss">✕</button>
           </div>
           <div className="detail-logs-body">
