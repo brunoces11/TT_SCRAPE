@@ -24,6 +24,8 @@ export default function Home() {
   const [currentXlsFile, setCurrentXlsFile] = useState<string>("");
   const [singleVideoUrl, setSingleVideoUrl] = useState("");
   const [singleVideoError, setSingleVideoError] = useState<string | null>(null);
+  const [isDownloadingX5, setIsDownloadingX5] = useState(false);
+  const [downloadX5Status, setDownloadX5Status] = useState<string | null>(null);
 
   // ─── Function 1: Fetch Channel ───
   const handleFetchChannel = async (params: SearchParams) => {
@@ -232,6 +234,77 @@ export default function Home() {
     setIsDownloadingAll(false);
   };
 
+  // ─── Download All x5 (transcripts + 5 variants per video) ───
+  const handleDownloadX5 = async () => {
+    if (selectedVideoUrls.length === 0) {
+      setError("Selecione pelo menos um vídeo.");
+      return;
+    }
+
+    setIsDownloadingX5(true);
+    setError(null);
+    setDetailLogs([]);
+    setDownloadX5Status(`Processando ${selectedVideoUrls.length} vídeo(s) x5... isso pode levar vários minutos`);
+
+    // Step 1: Transcripts (errors won't block step 2)
+    try {
+      await handleTranscribe();
+    } catch {
+      // continue even if transcription fails
+    }
+
+    // Step 2: Download each video individually with mode x5
+    let totalOk = 0;
+    let totalFailed = 0;
+    const meta = getSelectedMeta();
+
+    for (let i = 0; i < selectedVideoUrls.length; i++) {
+      const url = selectedVideoUrls[i];
+      const title = meta[i]?.title || "";
+
+      setDownloadX5Status(`Processando vídeo ${i + 1} de ${selectedVideoUrls.length} (x5)...`);
+
+      try {
+        const res = await fetch("/api/download-video", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            videoUrls: [url],
+            titles: [title],
+            mode: "x5",
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setDetailLogs((prev) => [...prev, `❌ [DOWNLOAD] Vídeo ${i + 1}: ${data.error || "Erro desconhecido"}`]);
+          totalFailed++;
+          continue;
+        }
+
+        if (data.results) {
+          const dlLogs = (data.results as { url: string; status: string; filename?: string; error?: string; variant?: string }[]).map(
+            (r) => r.status === "ok" ? `✅ ${r.filename}` : `❌ [FFMPEG] ${r.filename || r.variant || "?"}: ${r.error}`
+          );
+          setDetailLogs((prev) => [...prev, ...dlLogs]);
+
+          const okCount = data.results.filter((r: { status: string }) => r.status === "ok").length;
+          const failCount = data.results.filter((r: { status: string }) => r.status === "failed").length;
+          totalOk += okCount;
+          totalFailed += failCount;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Erro desconhecido";
+        setDetailLogs((prev) => [...prev, `❌ [DOWNLOAD] Vídeo ${i + 1}: Erro de rede — ${msg}`]);
+        totalFailed++;
+      }
+    }
+
+    setDownloadX5Status(`Download x5 concluído: ${totalOk} arquivo(s) com sucesso, ${totalFailed} falha(s). Pasta: downloads/`);
+    setIsDownloadingX5(false);
+  };
+
   // ─── Delete selected rows from UI + XLSX ───
   const handleDeleteSelected = async () => {
     if (selectedVideoUrls.length === 0) {
@@ -350,7 +423,7 @@ export default function Home() {
             <button
               className="btn btn-transcript"
               onClick={handleTranscribe}
-              disabled={isTranscribing || selectedVideoUrls.length === 0}
+              disabled={isTranscribing || isDownloadingX5 || selectedVideoUrls.length === 0}
             >
               {isTranscribing ? "Baixando..." : "📝 Baixar Transcrição"}
             </button>
@@ -358,7 +431,7 @@ export default function Home() {
             <button
               className="btn btn-download"
               onClick={handleDownloadVideos}
-              disabled={isDownloading || selectedVideoUrls.length === 0}
+              disabled={isDownloading || isDownloadingX5 || selectedVideoUrls.length === 0}
             >
               {isDownloading ? "Baixando..." : "⬇️ Baixar vídeos selecionados"}
             </button>
@@ -366,9 +439,17 @@ export default function Home() {
             <button
               className="btn btn-download-all"
               onClick={handleDownloadAll}
-              disabled={isDownloadingAll || isTranscribing || isDownloading || selectedVideoUrls.length === 0}
+              disabled={isDownloadingAll || isTranscribing || isDownloading || isDownloadingX5 || selectedVideoUrls.length === 0}
             >
               {isDownloadingAll ? "Baixando tudo..." : "📦 Baixar tudo"}
+            </button>
+
+            <button
+              className="btn btn-download-x5"
+              onClick={handleDownloadX5}
+              disabled={isDownloadingX5 || isDownloadingAll || isTranscribing || isDownloading || selectedVideoUrls.length === 0}
+            >
+              {isDownloadingX5 ? "Baixando x5..." : "🔥 Baixar tudo x5"}
             </button>
 
             <button
@@ -393,6 +474,20 @@ export default function Home() {
       {!isDownloading && downloadStatus && (
         <div className="transcript-summary">
           {downloadStatus}
+        </div>
+      )}
+
+      {/* ─── Download x5 Status ─── */}
+      {isDownloadingX5 && downloadX5Status && (
+        <div className="loading">
+          <div className="spinner" />
+          {downloadX5Status}
+        </div>
+      )}
+
+      {!isDownloadingX5 && downloadX5Status && (
+        <div className="transcript-summary">
+          {downloadX5Status}
         </div>
       )}
 

@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
         savedFiles: [],
         errors: [msg],
         noTranscript: [],
-        debugLogs: [`[APIFY] ${msg}`],
+        debugLogs: [`❌ [TRANSCRIÇÃO] Serviço Apify falhou: ${msg}`],
         downloadDir: DOWNLOAD_DIR,
       });
     }
