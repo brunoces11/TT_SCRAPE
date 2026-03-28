@@ -349,10 +349,11 @@ export default function Home() {
     const videoId = match[1];
     const url = singleVideoUrl.trim();
 
-    // Limpa estado anterior
+    // Clear previous state
     setTranscriptRows([]);
     setTranscriptStatus(null);
     setDownloadStatus(null);
+    setDownloadX5Status(null);
     setDetailLogs([]);
     setError(null);
 
@@ -371,6 +372,58 @@ export default function Home() {
     setSelectedVideoUrls([url]);
   };
 
+  const handleBatchFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = reader.result as string;
+      const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+      if (lines.length === 0) {
+        setSingleVideoError("The file is empty.");
+        return;
+      }
+
+      const valid: { url: string; videoId: string }[] = [];
+      const invalidLines: number[] = [];
+
+      lines.forEach((line, i) => {
+        const match = line.match(TIKTOK_VIDEO_REGEX);
+        if (match) {
+          valid.push({ url: line, videoId: match[1] });
+        } else {
+          invalidLines.push(i + 1);
+        }
+      });
+
+      if (valid.length === 0) {
+        setSingleVideoError(`No valid TikTok URLs found. Invalid lines: ${invalidLines.join(", ")}`);
+        return;
+      }
+
+      setSingleVideoError(invalidLines.length > 0 ? `Loaded ${valid.length} URL(s). Skipped ${invalidLines.length} invalid line(s).` : null);
+
+      setTranscriptRows([]);
+      setTranscriptStatus(null);
+      setDownloadStatus(null);
+      setDownloadX5Status(null);
+      setDetailLogs([]);
+      setError(null);
+
+      const uniqueUrls = [...new Set(valid.map((v) => v.url))];
+      const rows: ChannelVideoRow[] = uniqueUrls.map((url) => {
+        const videoId = url.match(TIKTOK_VIDEO_REGEX)![1];
+        return { videoId, title: `Video ${videoId}`, description: "", views: 0, likes: 0, hashtags: [], videoUrl: url };
+      });
+
+      setChannelRows(rows);
+      setSelectedVideoUrls(uniqueUrls);
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <main className="container">
       <h1>🎵 TikTok Scraper & Transcript Tool</h1>
@@ -379,24 +432,31 @@ export default function Home() {
       {/* ─── Channel Form ─── */}
       <ChannelForm onSubmit={handleFetchChannel} isLoading={isFetchingChannel} />
 
-      {/* ─── Single Video URL ─── */}
+      {/* ─── Single Video URL / Batch Upload ─── */}
       <div className="single-video-section">
-        <div className="single-video-row">
-          <input
-            type="text"
-            placeholder="Paste a TikTok video URL here"
-            value={singleVideoUrl}
-            onChange={(e) => { setSingleVideoUrl(e.target.value); setSingleVideoError(null); }}
-            disabled={isFetchingChannel}
-            onKeyDown={(e) => { if (e.key === "Enter") handleSingleVideoSubmit(); }}
-          />
-          <button
-            className="btn btn-primary"
-            onClick={handleSingleVideoSubmit}
-            disabled={!singleVideoUrl.trim() || isFetchingChannel}
-          >
-            🎬 Load video
-          </button>
+        <div className="single-video-cols">
+          <div className="single-video-row">
+            <input
+              type="text"
+              placeholder="Paste a TikTok video URL here"
+              value={singleVideoUrl}
+              onChange={(e) => { setSingleVideoUrl(e.target.value); setSingleVideoError(null); }}
+              disabled={isFetchingChannel}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSingleVideoSubmit(); }}
+            />
+            <button
+              className="btn btn-primary"
+              onClick={handleSingleVideoSubmit}
+              disabled={!singleVideoUrl.trim() || isFetchingChannel}
+            >
+              🎬 Load video
+            </button>
+          </div>
+          <div className="batch-upload-divider">or</div>
+          <label className="btn btn-primary batch-upload-btn">
+            📄 Upload .txt
+            <input type="file" accept=".txt" onChange={handleBatchFileUpload} hidden />
+          </label>
         </div>
         {singleVideoError && <div className="single-video-error">{singleVideoError}</div>}
       </div>

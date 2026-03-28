@@ -586,10 +586,30 @@ tbody tr:last-child td {
   margin-bottom: 1.5rem;
 }
 
+.single-video-cols {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .single-video-row {
   display: flex;
   gap: 0.75rem;
   align-items: center;
+  flex: 1;
+  min-width: 300px;
+}
+
+.batch-upload-divider {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  padding: 0 0.25rem;
+}
+
+.batch-upload-btn {
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .single-video-row input {
