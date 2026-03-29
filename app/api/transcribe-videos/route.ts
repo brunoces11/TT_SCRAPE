@@ -7,6 +7,52 @@ export const maxDuration = 300;
 
 const DOWNLOAD_DIR = path.join(process.cwd(), "downloads");
 
+interface ActorConfig {
+  id: string;
+  name: string;
+  default: boolean;
+  inputUrlField: string;
+  inputUrlMode: "array" | "single";
+  outputTranscriptField: string;
+  outputUrlField: string;
+  isWebVtt: boolean;
+}
+
+function loadActorConfig(actorId?: string): ActorConfig {
+  const configPath = path.join(process.cwd(), "apify-actors.json");
+  const raw = fs.readFileSync(configPath, "utf-8");
+  const config = JSON.parse(raw);
+  const actors: ActorConfig[] = config.transcriptActors || [];
+  if (actorId) {
+    const found = actors.find((a) => a.id === actorId);
+    if (found) return found;
+  }
+  const defaultActor = actors.find((a) => a.default);
+  if (defaultActor) return defaultActor;
+  if (actors.length > 0) return actors[0];
+  throw new Error("No transcript actors configured in apify-actors.json");
+}
+
+function getNestedField(obj: Record<string, unknown>, fieldPath: string): string {
+  const val = fieldPath.split(".").reduce<unknown>((o, k) => {
+    if (o && typeof o === "object" && k in (o as Record<string, unknown>)) {
+      return (o as Record<string, unknown>)[k];
+    }
+    return undefined;
+  }, obj);
+  return typeof val === "string" ? val : "";
+}
+
+function cleanTikTokUrl(url: string): string {
+  // Remove query parameters and fragments, keep only the clean path
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return url.trim();
+  }
+}
+
 function sanitizeFilename(title: string): string {
   return title
     .normalize("NFD")
@@ -79,10 +125,11 @@ Transcription: ${transcript}`;
 export async function POST(request: NextRequest) {
   // Parse body outside try so it's accessible in catch for fallback file generation
   const body = await request.json();
-  const { videoUrls, videosMeta = [] } = body;
+  const { videoUrls, videosMeta = [], actorId: requestedActorId } = body;
+  const debugLogs: string[] = [];
 
   try {
-    const debugLogs: string[] = [];
+    const actorConfig = loadActorConfig(requestedActorId);
 
     debugLogs.push(`[INPUT] videoUrls count: ${videoUrls?.length}, videosMeta count: ${videosMeta?.length}`);
 
@@ -90,12 +137,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Select at least one video." }, { status: 400 });
     }
 
-    const actorId = process.env.APIFY_TRANSCRIPT_ACTOR_ID || "sociavault/tiktok-transcript-scraper";
-    // No language param — let the actor detect the original language
-    const input = { videoUrls };
-    debugLogs.push(`[APIFY] actor=${actorId}`);
+    debugLogs.push(`[APIFY] actor=${actorConfig.id} (${actorConfig.name})`);
 
-    const rawItems = await runActorAndGetResults(actorId, input);
+    // Clean URLs before sending to actor (remove query params, fragments)
+    const cleanedUrls = videoUrls.map((u: string) => cleanTikTokUrl(u));
+    debugLogs.push(`[APIFY] URLs to send: ${JSON.stringify(cleanedUrls).substring(0, 500)}`);
+
+    // Call actor based on inputUrlMode
+    let rawItems: unknown[];
+    if (actorConfig.inputUrlMode === "single") {
+      // Single mode: 1 run per video, collect results
+      rawItems = [];
+      for (const url of cleanedUrls) {
+        try {
+          const input = { [actorConfig.inputUrlField]: url };
+          const items = await runActorAndGetResults(actorConfig.id, input);
+          rawItems.push(...items);
+        } catch (singleErr) {
+          const singleMsg = singleErr instanceof Error ? singleErr.message : "Unknown error";
+          debugLogs.push(`[APIFY] Single run failed for ${url.substring(0, 60)}: ${singleMsg}`);
+        }
+      }
+    } else {
+      // Array mode: 1 run with all URLs
+      const input = { [actorConfig.inputUrlField]: cleanedUrls };
+      rawItems = await runActorAndGetResults(actorConfig.id, input);
+    }
+
     debugLogs.push(`[APIFY] rawItems count: ${rawItems.length}`);
 
     if (rawItems.length > 0) {
@@ -125,8 +193,8 @@ export async function POST(request: NextRequest) {
     for (let ri = 0; ri < rawItems.length; ri++) {
       const item = rawItems[ri] as Record<string, string>;
       try {
-        const itemUrl = item.videoUrl || item.url || "";
-        const rawTranscript = item.transcript || item.transcription || item.text || "";
+        const itemUrl = getNestedField(item, actorConfig.outputUrlField) || (item as Record<string, string>).url || "";
+        const rawTranscript = getNestedField(item, actorConfig.outputTranscriptField) || "";
 
         debugLogs.push(`[ITEM ${ri}] url=${itemUrl.substring(0, 80)}, transcript_len=${rawTranscript.length}, hasTranscript=${item.hasTranscript}`);
 
@@ -165,7 +233,7 @@ export async function POST(request: NextRequest) {
           noTranscript.push(itemUrl || videoUrls[ri] || `video ${ri}`);
           debugLogs.push(`[ITEM ${ri}] NO TRANSCRIPT: ${errorDetail}`);
         } else {
-          const cleaned = cleanWebVtt(rawTranscript);
+          const cleaned = actorConfig.isWebVtt ? cleanWebVtt(rawTranscript) : rawTranscript.trim();
           if (!cleaned.trim()) {
             transcriptField = "ERRO: Transcript returned empty after cleaning (WebVTT contained no text content)";
             errorSuffix = "_erro_empty";
@@ -193,42 +261,38 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ rawItems, savedFiles, errors, noTranscript, debugLogs, downloadDir: DOWNLOAD_DIR });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
-    // Distinguish Apify actor failure from other errors
-    // Even on actor failure, save .txt files with metadata + error in transcription field
-    if (msg.includes("Actor run failed")) {
-      const fallbackSaved: string[] = [];
-      const fallbackLogs: string[] = [`❌ [TRANSCRIPT] Apify service failed: ${msg}`];
+    // On any error, save .txt files with metadata + error in transcription field
+    const fallbackSaved: string[] = [];
+    const fallbackLogs: string[] = [...debugLogs, `❌ [TRANSCRIPT] Apify service failed: ${msg}`];
 
-      if (!fs.existsSync(DOWNLOAD_DIR)) {
-        fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
-      }
-
-      for (let i = 0; i < videosMeta.length; i++) {
-        const meta = videosMeta[i] as VideoMeta | undefined;
-        if (!meta || !meta.title) continue;
-        const safeName = sanitizeFilename(meta.title);
-        if (!safeName) continue;
-        const errorSuffix = getErrorSuffix(msg);
-        const txtContent = buildTxtContent(meta, `ERRO: Apify actor failed — ${msg}`);
-        const fileName = `${safeName}${errorSuffix}.txt`;
-        const txtPath = path.join(DOWNLOAD_DIR, fileName);
-        fs.writeFileSync(txtPath, txtContent, "utf-8");
-        fallbackSaved.push(fileName);
-        fallbackLogs.push(`[FALLBACK] SAVED: ${fileName} (metadata only, transcript error)`);
-      }
-
-      return NextResponse.json({
-        error: null,
-        actorFailed: true,
-        actorError: msg,
-        rawItems: [],
-        savedFiles: fallbackSaved,
-        errors: [msg],
-        noTranscript: videoUrls,
-        debugLogs: fallbackLogs,
-        downloadDir: DOWNLOAD_DIR,
-      });
+    if (!fs.existsSync(DOWNLOAD_DIR)) {
+      fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
     }
-    return NextResponse.json({ error: msg }, { status: 500 });
+
+    for (let i = 0; i < videosMeta.length; i++) {
+      const meta = videosMeta[i] as VideoMeta | undefined;
+      if (!meta || !meta.title) continue;
+      const safeName = sanitizeFilename(meta.title);
+      if (!safeName) continue;
+      const errorSuffix = getErrorSuffix(msg);
+      const txtContent = buildTxtContent(meta, `ERRO: Apify actor failed — ${msg}`);
+      const fileName = `${safeName}${errorSuffix}.txt`;
+      const txtPath = path.join(DOWNLOAD_DIR, fileName);
+      fs.writeFileSync(txtPath, txtContent, "utf-8");
+      fallbackSaved.push(fileName);
+      fallbackLogs.push(`[FALLBACK] SAVED: ${fileName} (metadata only, transcript error)`);
+    }
+
+    return NextResponse.json({
+      error: null,
+      actorFailed: true,
+      actorError: msg,
+      rawItems: [],
+      savedFiles: fallbackSaved,
+      errors: [msg],
+      noTranscript: videoUrls,
+      debugLogs: fallbackLogs,
+      downloadDir: DOWNLOAD_DIR,
+    });
   }
 }

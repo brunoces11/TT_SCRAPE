@@ -1,0 +1,24 @@
+{
+  "transcriptActors": [
+    {
+      "id": "sian.agency/best-tiktok-ai-transcript-extractor",
+      "name": "SIAN Agency (AI Transcript)",
+      "default": true,
+      "inputUrlField": "tiktokUrl",
+      "inputUrlMode": "single",
+      "outputTranscriptField": "transcript",
+      "outputUrlField": "tiktokUrl",
+      "isWebVtt": false
+    },
+    {
+      "id": "sociavault/tiktok-transcript-scraper",
+      "name": "SociaVault (Deprecated)",
+      "default": false,
+      "inputUrlField": "videoUrls",
+      "inputUrlMode": "array",
+      "outputTranscriptField": "transcript",
+      "outputUrlField": "videoUrl",
+      "isWebVtt": true
+    }
+  ]
+}

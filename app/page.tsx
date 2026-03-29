@@ -27,6 +27,8 @@ export default function Home() {
   const [isDownloadingX5, setIsDownloadingX5] = useState(false);
   const [downloadX5Status, setDownloadX5Status] = useState<string | null>(null);
   const [apifyCredits, setApifyCredits] = useState<{ usedUsd: number; limitUsd: number; remainingUsd: number } | null>(null);
+  const [transcriptActors, setTranscriptActors] = useState<{ id: string; name: string; default: boolean }[]>([]);
+  const [selectedTranscriptActor, setSelectedTranscriptActor] = useState<string>("");
 
   const fetchCredits = useCallback(async () => {
     try {
@@ -40,7 +42,20 @@ export default function Home() {
     return null;
   }, []);
 
-  useEffect(() => { fetchCredits(); }, [fetchCredits]);
+  useEffect(() => {
+    fetchCredits();
+    // Load actor config
+    fetch("/api/apify-actors")
+      .then((r) => r.json())
+      .then((data) => {
+        const actors = data.transcriptActors || [];
+        setTranscriptActors(actors);
+        const defaultActor = actors.find((a: { default: boolean }) => a.default);
+        if (defaultActor) setSelectedTranscriptActor(defaultActor.id);
+        else if (actors.length > 0) setSelectedTranscriptActor(actors[0].id);
+      })
+      .catch(() => {});
+  }, [fetchCredits]);
 
   // ─── Function 1: Fetch Channel ───
   const handleFetchChannel = async (params: SearchParams) => {
@@ -122,6 +137,7 @@ export default function Home() {
         body: JSON.stringify({
           videoUrls: selectedVideoUrls,
           videosMeta: getSelectedMeta(),
+          actorId: selectedTranscriptActor,
         }),
       });
 
@@ -253,11 +269,34 @@ export default function Home() {
       // continue even if transcription fails
     }
 
-    // Step 2: Videos (always runs)
+    // Step 2: Videos (always runs) — preserve transcript logs
     try {
-      await handleDownloadVideos();
+      // Don't clear error/logs — handleDownloadVideos adds to existing logs
+      setIsDownloading(true);
+      setDownloadStatus(`Downloading ${selectedVideoUrls.length} video(s)... this may take a few minutes`);
+
+      const res = await fetch("/api/download-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videoUrls: selectedVideoUrls,
+          titles: getSelectedMeta().map((m) => m.title),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.results) {
+        const dlLogs = (data.results as { url: string; status: string; filename?: string; error?: string }[]).map(
+          (r) => r.status === "ok" ? `✅ ${r.filename}` : `❌ ${r.url.substring(0, 60)} — ${r.error}`
+        );
+        setDetailLogs((prev) => [...prev, ...dlLogs]);
+      }
+
+      setDownloadStatus(data.message || null);
+      setIsDownloading(false);
     } catch {
-      // continue
+      setIsDownloading(false);
     }
 
     setIsDownloadingAll(false);
@@ -460,11 +499,25 @@ export default function Home() {
           <h1>🎵 TikTok Scraper & Transcript Tool</h1>
           <p className="subtitle">Local research tool — extract data and transcripts from TikTok channels</p>
         </div>
-        {apifyCredits && (
-          <div className="credits-badge" title={`Used: $${apifyCredits.usedUsd.toFixed(2)} / Limit: $${apifyCredits.limitUsd.toFixed(2)}`}>
-            💳 ${apifyCredits.remainingUsd.toFixed(2)}
-          </div>
-        )}
+        <div className="header-controls">
+          {transcriptActors.length > 0 && (
+            <select
+              className="actor-selector"
+              value={selectedTranscriptActor}
+              onChange={(e) => setSelectedTranscriptActor(e.target.value)}
+              title="Transcript actor"
+            >
+              {transcriptActors.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          )}
+          {apifyCredits && (
+            <div className="credits-badge" title={`Used: $${apifyCredits.usedUsd.toFixed(2)} / Limit: $${apifyCredits.limitUsd.toFixed(2)}`}>
+              💳 ${apifyCredits.remainingUsd.toFixed(2)}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ─── Channel Form ─── */}
