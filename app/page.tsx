@@ -406,6 +406,7 @@ export default function Home() {
   };
 
   const TIKTOK_VIDEO_REGEX = /tiktok\.com\/@[\w.-]+\/video\/(\d+)/;
+  const TIKTOK_URL_REGEX = /tiktok\.com/;
 
   const handleSingleVideoSubmit = () => {
     setSingleVideoError(null);
@@ -445,8 +446,10 @@ export default function Home() {
     if (!file) return;
     e.target.value = "";
 
+    const fileName = file.name.replace(/\.txt$/i, "");
+
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const text = reader.result as string;
       const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
       if (lines.length === 0) {
@@ -454,13 +457,12 @@ export default function Home() {
         return;
       }
 
-      const valid: { url: string; videoId: string }[] = [];
+      const valid: string[] = [];
       const invalidLines: number[] = [];
 
       lines.forEach((line, i) => {
-        const match = line.match(TIKTOK_VIDEO_REGEX);
-        if (match) {
-          valid.push({ url: line, videoId: match[1] });
+        if (TIKTOK_URL_REGEX.test(line)) {
+          valid.push(line);
         } else {
           invalidLines.push(i + 1);
         }
@@ -471,23 +473,45 @@ export default function Home() {
         return;
       }
 
-      setSingleVideoError(invalidLines.length > 0 ? `Loaded ${valid.length} URL(s). Skipped ${invalidLines.length} invalid line(s).` : null);
+      if (invalidLines.length > 0) {
+        setSingleVideoError(`Skipped ${invalidLines.length} invalid line(s). Fetching ${valid.length} video(s)...`);
+      } else {
+        setSingleVideoError(null);
+      }
 
+      // Clear state and start fetching
       setTranscriptRows([]);
       setTranscriptStatus(null);
       setDownloadStatus(null);
       setDownloadX5Status(null);
       setDetailLogs([]);
       setError(null);
+      setIsFetchingChannel(true);
+      setChannelRows([]);
+      setSelectedVideoUrls([]);
 
-      const uniqueUrls = [...new Set(valid.map((v) => v.url))];
-      const rows: ChannelVideoRow[] = uniqueUrls.map((url) => {
-        const videoId = url.match(TIKTOK_VIDEO_REGEX)![1];
-        return { videoId, title: `Video ${videoId}`, description: "", views: 0, likes: 0, hashtags: [], videoUrl: url };
-      });
+      try {
+        const res = await fetch("/api/fetch-videos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ videoUrls: valid, xlsLabel: fileName }),
+        });
 
-      setChannelRows(rows);
-      setSelectedVideoUrls(uniqueUrls);
+        const data = await res.json();
+
+        if (!res.ok) {
+          setError(data.error || "Error fetching video data.");
+          return;
+        }
+
+        setChannelRows(data.rows || []);
+        setSelectedVideoUrls((data.rows || []).map((r: ChannelVideoRow) => r.videoUrl));
+        if (data.savedFile) setCurrentXlsFile(data.savedFile);
+      } catch {
+        setError("Network error fetching video data.");
+      } finally {
+        setIsFetchingChannel(false);
+      }
     };
     reader.readAsText(file);
   };
