@@ -59,7 +59,27 @@ export async function runActorAndGetResults(
   // 3. Check final status
   const finalStatus = runData.data?.status;
   if (finalStatus !== "SUCCEEDED") {
-    throw new Error(`Actor run failed with status: ${finalStatus}`);
+    const statusMessage = runData.data?.statusMessage || "";
+    const exitCode = runData.data?.exitCode;
+    
+    // Try to fetch the run log for more details
+    let logSnippet = "";
+    try {
+      const logUrl = `${BASE_URL}/acts/${actorIdForUrl}/runs/${runId}/log?token=${APIFY_TOKEN}`;
+      const logResponse = await fetch(logUrl);
+      if (logResponse.ok) {
+        const fullLog = await logResponse.text();
+        // Get last 500 chars of log for error context
+        logSnippet = fullLog.slice(-500).trim();
+      }
+    } catch { /* ignore log fetch errors */ }
+
+    let errorMsg = `Actor run failed with status: ${finalStatus}`;
+    if (statusMessage) errorMsg += ` — ${statusMessage}`;
+    if (exitCode != null) errorMsg += ` (exit code: ${exitCode})`;
+    if (logSnippet) errorMsg += `\n[LOG] ${logSnippet}`;
+    
+    throw new Error(errorMsg);
   }
 
   // 4. Fetch dataset items

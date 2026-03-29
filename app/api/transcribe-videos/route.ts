@@ -38,6 +38,26 @@ interface VideoMeta {
   publishDate: string;
 }
 
+function getErrorSuffix(errorMsg: string): string {
+  // Try to extract numeric exit code from Apify actor errors
+  const exitCodeMatch = errorMsg.match(/exit code:\s*(\d+)/i);
+  if (exitCodeMatch) return `_erro_${exitCodeMatch[1]}`;
+
+  // Try to extract HTTP status code
+  const httpMatch = errorMsg.match(/\((\d{3})\)/);
+  if (httpMatch) return `_erro_${httpMatch[1]}`;
+
+  // Map known error messages to short abbreviations
+  const msg = errorMsg.toLowerCase();
+  if (msg.includes("not found") || msg.includes("private")) return "_erro_not_found";
+  if (msg.includes("caption") || msg.includes("does not have")) return "_erro_no_caption";
+  if (msg.includes("empty")) return "_erro_empty";
+  if (msg.includes("timeout") || msg.includes("timed out")) return "_erro_timeout";
+  if (msg.includes("actor") && msg.includes("failed")) return "_erro_actor_fail";
+
+  return "_erro_unknown";
+}
+
 function buildTxtContent(meta: VideoMeta, transcript: string): string {
   return `Title: ${meta.title}
 
@@ -57,9 +77,11 @@ Transcription: ${transcript}`;
 }
 
 export async function POST(request: NextRequest) {
+  // Parse body outside try so it's accessible in catch for fallback file generation
+  const body = await request.json();
+  const { videoUrls, videosMeta = [] } = body;
+
   try {
-    const body = await request.json();
-    const { videoUrls, videosMeta = [] } = body;
     const debugLogs: string[] = [];
 
     debugLogs.push(`[INPUT] videoUrls count: ${videoUrls?.length}, videosMeta count: ${videosMeta?.length}`);
@@ -104,15 +126,9 @@ export async function POST(request: NextRequest) {
       const item = rawItems[ri] as Record<string, string>;
       try {
         const itemUrl = item.videoUrl || item.url || "";
-        const transcript = item.transcript || item.transcription || item.text || "";
+        const rawTranscript = item.transcript || item.transcription || item.text || "";
 
-        debugLogs.push(`[ITEM ${ri}] url=${itemUrl.substring(0, 80)}, transcript_len=${transcript.length}, hasTranscript=${item.hasTranscript}`);
-
-        if (!transcript) {
-          debugLogs.push(`[ITEM ${ri}] SKIP: no transcript (message=${item.message || "none"})`);
-          noTranscript.push(itemUrl || videoUrls[ri] || `video ${ri}`);
-          continue;
-        }
+        debugLogs.push(`[ITEM ${ri}] url=${itemUrl.substring(0, 80)}, transcript_len=${rawTranscript.length}, hasTranscript=${item.hasTranscript}`);
 
         const idMatch = itemUrl.match(/\/video\/(\d+)/);
         const videoId = idMatch ? idMatch[1] : "";
@@ -127,14 +143,7 @@ export async function POST(request: NextRequest) {
         }
 
         if (!meta || !meta.title) {
-          debugLogs.push(`[ITEM ${ri}] SKIP: no meta/title found`);
-          noTranscript.push(itemUrl || videoUrls[ri] || `video ${ri}`);
-          continue;
-        }
-
-        const cleaned = cleanWebVtt(transcript);
-        if (!cleaned.trim()) {
-          debugLogs.push(`[ITEM ${ri}] SKIP: cleaned transcript empty`);
+          debugLogs.push(`[ITEM ${ri}] SKIP: no meta/title found (cannot generate filename)`);
           noTranscript.push(itemUrl || videoUrls[ri] || `video ${ri}`);
           continue;
         }
@@ -146,11 +155,33 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        const txtContent = buildTxtContent(meta, cleaned);
-        const txtPath = path.join(DOWNLOAD_DIR, `${safeName}.txt`);
+        // Determine transcript content or error message
+        let transcriptField: string;
+        let errorSuffix = "";
+        if (!rawTranscript) {
+          const errorDetail = item.message || item.error || "Transcript unavailable — no transcript returned by API";
+          transcriptField = `ERRO: ${errorDetail}`;
+          errorSuffix = getErrorSuffix(errorDetail);
+          noTranscript.push(itemUrl || videoUrls[ri] || `video ${ri}`);
+          debugLogs.push(`[ITEM ${ri}] NO TRANSCRIPT: ${errorDetail}`);
+        } else {
+          const cleaned = cleanWebVtt(rawTranscript);
+          if (!cleaned.trim()) {
+            transcriptField = "ERRO: Transcript returned empty after cleaning (WebVTT contained no text content)";
+            errorSuffix = "_erro_empty";
+            noTranscript.push(itemUrl || videoUrls[ri] || `video ${ri}`);
+            debugLogs.push(`[ITEM ${ri}] EMPTY AFTER CLEAN`);
+          } else {
+            transcriptField = cleaned;
+          }
+        }
+
+        const txtContent = buildTxtContent(meta, transcriptField);
+        const fileName = `${safeName}${errorSuffix}.txt`;
+        const txtPath = path.join(DOWNLOAD_DIR, fileName);
         fs.writeFileSync(txtPath, txtContent, "utf-8");
-        savedFiles.push(`${safeName}.txt`);
-        debugLogs.push(`[ITEM ${ri}] SAVED: ${safeName}.txt (${txtContent.length} chars)`);
+        savedFiles.push(fileName);
+        debugLogs.push(`[ITEM ${ri}] SAVED: ${fileName} (${txtContent.length} chars)`);
       } catch (e: unknown) {
         const errMsg = e instanceof Error ? e.message : "unknown error";
         debugLogs.push(`[ITEM ${ri}] ERROR: ${errMsg}`);
@@ -163,16 +194,38 @@ export async function POST(request: NextRequest) {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     // Distinguish Apify actor failure from other errors
+    // Even on actor failure, save .txt files with metadata + error in transcription field
     if (msg.includes("Actor run failed")) {
+      const fallbackSaved: string[] = [];
+      const fallbackLogs: string[] = [`❌ [TRANSCRIPT] Apify service failed: ${msg}`];
+
+      if (!fs.existsSync(DOWNLOAD_DIR)) {
+        fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
+      }
+
+      for (let i = 0; i < videosMeta.length; i++) {
+        const meta = videosMeta[i] as VideoMeta | undefined;
+        if (!meta || !meta.title) continue;
+        const safeName = sanitizeFilename(meta.title);
+        if (!safeName) continue;
+        const errorSuffix = getErrorSuffix(msg);
+        const txtContent = buildTxtContent(meta, `ERRO: Apify actor failed — ${msg}`);
+        const fileName = `${safeName}${errorSuffix}.txt`;
+        const txtPath = path.join(DOWNLOAD_DIR, fileName);
+        fs.writeFileSync(txtPath, txtContent, "utf-8");
+        fallbackSaved.push(fileName);
+        fallbackLogs.push(`[FALLBACK] SAVED: ${fileName} (metadata only, transcript error)`);
+      }
+
       return NextResponse.json({
         error: null,
         actorFailed: true,
         actorError: msg,
         rawItems: [],
-        savedFiles: [],
+        savedFiles: fallbackSaved,
         errors: [msg],
-        noTranscript: [],
-        debugLogs: [`❌ [TRANSCRIPT] Apify service failed: ${msg}`],
+        noTranscript: videoUrls,
+        debugLogs: fallbackLogs,
         downloadDir: DOWNLOAD_DIR,
       });
     }
