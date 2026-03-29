@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
             const variantPath = path.join(DOWNLOAD_DIR, `${safeName}_${variantLabel}.mp4`);
             try {
               const p = generateRandomParams();
-              const ffmpegCmd = `ffmpeg -y -i "${tempPath}" -map_metadata -1 -vf "scale=iw*${p.scaleFactor}:ih*${p.scaleFactor},crop=iw/${p.scaleFactor}:ih/${p.scaleFactor},noise=alls=${p.noise}:allf=t,setpts=${(1 / p.speed).toFixed(6)}*PTS" -af "atempo=${p.speed.toFixed(4)},asetrate=44100*${p.pitch.toFixed(4)},aresample=44100" -c:v libx264 -preset ultrafast -crf ${p.crf} -c:a aac -b:a 64k -movflags +faststart "${variantPath}"`;
+              const ffmpegCmd = `ffmpeg -y -i "${tempPath}" -map_metadata -1 -vf "scale=iw*${p.scaleFactor}:ih*${p.scaleFactor},crop=iw/${p.scaleFactor}:ih/${p.scaleFactor},noise=alls=${p.noise}:allf=t,setpts=${(1 / p.speed).toFixed(6)}*PTS" -af "atempo=${p.speed.toFixed(4)},asetrate=44100*${p.pitch.toFixed(4)},aresample=44100" -c:v libx264 -preset veryfast -crf ${p.crf} -c:a aac -b:a 64k -movflags +faststart "${variantPath}"`;
               await execAsync(ffmpegCmd, { timeout: 600000 });
               results.push({ url, status: "ok", filename: `${safeName}_${variantLabel}.mp4`, variant: variantLabel });
             } catch (varErr: unknown) {
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
           // - minimal noise (noise alls=3)
           // - 1% slower (setpts=1.01*PTS + atempo=0.99)
           // - audio pitch shift 1% (asetrate+aresample)
-          const ffmpegCmd = `ffmpeg -y -i "${tempPath}" -map_metadata -1 -vf "scale=iw*1.01:ih*1.01,crop=iw/1.01:ih/1.01,noise=alls=3:allf=t,setpts=1.01*PTS" -af "atempo=0.99,asetrate=44100*1.01,aresample=44100" -c:v libx264 -preset ultrafast -crf 23 -c:a aac -movflags +faststart "${finalPath}"`;
+          const ffmpegCmd = `ffmpeg -y -i "${tempPath}" -map_metadata -1 -vf "scale=iw*1.01:ih*1.01,crop=iw/1.01:ih/1.01,noise=alls=3:allf=t,setpts=1.01*PTS" -af "atempo=0.99,asetrate=44100*1.01,aresample=44100" -c:v libx264 -preset veryfast -crf 28 -c:a aac -b:a 64k -movflags +faststart "${finalPath}"`;
           await execAsync(ffmpegCmd, { timeout: 600000 });
 
           // Remove temp file
