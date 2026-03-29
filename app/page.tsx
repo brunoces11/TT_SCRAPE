@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import ChannelForm from "@/components/ChannelForm";
 import type { SearchParams } from "@/components/ChannelForm";
 import VideoResultsTable from "@/components/VideoResultsTable";
@@ -26,6 +26,21 @@ export default function Home() {
   const [singleVideoError, setSingleVideoError] = useState<string | null>(null);
   const [isDownloadingX5, setIsDownloadingX5] = useState(false);
   const [downloadX5Status, setDownloadX5Status] = useState<string | null>(null);
+  const [apifyCredits, setApifyCredits] = useState<{ usedUsd: number; limitUsd: number; remainingUsd: number } | null>(null);
+
+  const fetchCredits = useCallback(async () => {
+    try {
+      const res = await fetch("/api/apify-credits");
+      if (res.ok) {
+        const data = await res.json();
+        setApifyCredits(data);
+        return data.usedUsd as number;
+      }
+    } catch { /* silent */ }
+    return null;
+  }, []);
+
+  useEffect(() => { fetchCredits(); }, [fetchCredits]);
 
   // ─── Function 1: Fetch Channel ───
   const handleFetchChannel = async (params: SearchParams) => {
@@ -37,6 +52,8 @@ export default function Home() {
     setSelectedVideoUrls([]);
     setTranscriptRows([]);
     setDetailLogs([]);
+
+    const creditsBefore = await fetchCredits();
 
     try {
       const res = await fetch("/api/fetch-channel", {
@@ -59,6 +76,11 @@ export default function Home() {
       setError("Network error connecting to server.");
     } finally {
       setIsFetchingChannel(false);
+      const creditsAfter = await fetchCredits();
+      if (creditsBefore != null && creditsAfter != null) {
+        const spent = Math.max(0, creditsAfter - creditsBefore);
+        if (spent > 0) setDetailLogs((prev) => [...prev, `💰 Apify credits used: $${spent.toFixed(4)}`]);
+      }
     }
   };
 
@@ -90,6 +112,8 @@ export default function Home() {
     setTranscriptRows([]);
     setDetailLogs([]);
     setTranscriptStatus(`Transcribing ${selectedVideoUrls.length} video(s)... this may take a few minutes`);
+
+    const creditsBefore = await fetchCredits();
 
     try {
       const res = await fetch("/api/transcribe-videos", {
@@ -156,6 +180,11 @@ export default function Home() {
       setTranscriptStatus(null);
     } finally {
       setIsTranscribing(false);
+      const creditsAfter = await fetchCredits();
+      if (creditsBefore != null && creditsAfter != null) {
+        const spent = Math.max(0, creditsAfter - creditsBefore);
+        if (spent > 0) setDetailLogs((prev) => [...prev, `💰 Apify credits used: $${spent.toFixed(4)}`]);
+      }
     }
   };
 
@@ -426,8 +455,17 @@ export default function Home() {
 
   return (
     <main className="container">
-      <h1>🎵 TikTok Scraper & Transcript Tool</h1>
-      <p className="subtitle">Local research tool — extract data and transcripts from TikTok channels</p>
+      <div className="header-row">
+        <div>
+          <h1>🎵 TikTok Scraper & Transcript Tool</h1>
+          <p className="subtitle">Local research tool — extract data and transcripts from TikTok channels</p>
+        </div>
+        {apifyCredits && (
+          <div className="credits-badge" title={`Used: $${apifyCredits.usedUsd.toFixed(2)} / Limit: $${apifyCredits.limitUsd.toFixed(2)}`}>
+            💳 ${apifyCredits.remainingUsd.toFixed(2)}
+          </div>
+        )}
+      </div>
 
       {/* ─── Channel Form ─── */}
       <ChannelForm onSubmit={handleFetchChannel} isLoading={isFetchingChannel} />

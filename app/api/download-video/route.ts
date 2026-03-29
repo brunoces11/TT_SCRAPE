@@ -4,7 +4,7 @@ import { promisify } from "util";
 import path from "path";
 import fs from "fs";
 
-export const maxDuration = 300;
+export const maxDuration = 600;
 
 const execAsync = promisify(exec);
 
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
             try {
               const p = generateRandomParams();
               const ffmpegCmd = `ffmpeg -y -i "${tempPath}" -map_metadata -1 -vf "scale=iw*${p.scaleFactor}:ih*${p.scaleFactor},crop=iw/${p.scaleFactor}:ih/${p.scaleFactor},noise=alls=${p.noise}:allf=t,setpts=${(1 / p.speed).toFixed(6)}*PTS" -af "atempo=${p.speed.toFixed(4)},asetrate=44100*${p.pitch.toFixed(4)},aresample=44100" -c:v libx264 -preset medium -crf ${p.crf} -c:a aac -b:a 64k -movflags +faststart "${variantPath}"`;
-              await execAsync(ffmpegCmd, { timeout: 300000 });
+              await execAsync(ffmpegCmd, { timeout: 600000 });
               results.push({ url, status: "ok", filename: `${safeName}_${variantLabel}.mp4`, variant: variantLabel });
             } catch (varErr: unknown) {
               const varMsg = varErr instanceof Error ? varErr.message : "Unknown error";
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
           // - 1% slower (setpts=1.01*PTS + atempo=0.99)
           // - audio pitch shift 1% (asetrate+aresample)
           const ffmpegCmd = `ffmpeg -y -i "${tempPath}" -map_metadata -1 -vf "scale=iw*1.01:ih*1.01,crop=iw/1.01:ih/1.01,noise=alls=3:allf=t,setpts=1.01*PTS" -af "atempo=0.99,asetrate=44100*1.01,aresample=44100" -c:v libx264 -preset fast -crf 23 -c:a aac -movflags +faststart "${finalPath}"`;
-          await execAsync(ffmpegCmd, { timeout: 300000 });
+          await execAsync(ffmpegCmd, { timeout: 600000 });
 
           // Remove temp file
           if (fs.existsSync(tempPath)) {

@@ -51,6 +51,31 @@ h1 {
   margin-bottom: 2rem;
 }
 
+/* ─── Header Row ─── */
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.header-row .subtitle {
+  margin-bottom: 0;
+}
+
+.credits-badge {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.82rem;
+  color: var(--primary);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: default;
+}
+
 /* ─── Channel Form ─── */
 .channel-form {
   background: var(--surface);
