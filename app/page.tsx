@@ -408,14 +408,13 @@ export default function Home() {
   const TIKTOK_VIDEO_REGEX = /tiktok\.com\/@[\w.-]+\/video\/(\d+)/;
   const TIKTOK_URL_REGEX = /tiktok\.com/;
 
-  const handleSingleVideoSubmit = () => {
+  const handleSingleVideoSubmit = async () => {
     setSingleVideoError(null);
     const match = singleVideoUrl.trim().match(TIKTOK_VIDEO_REGEX);
     if (!match) {
       setSingleVideoError("Invalid URL. Use the format: https://www.tiktok.com/@username/video/1234567890");
       return;
     }
-    const videoId = match[1];
     const url = singleVideoUrl.trim();
 
     // Clear previous state
@@ -425,20 +424,32 @@ export default function Home() {
     setDownloadX5Status(null);
     setDetailLogs([]);
     setError(null);
+    setIsFetchingChannel(true);
+    setChannelRows([]);
+    setSelectedVideoUrls([]);
 
-    // Cria ChannelVideoRow sintético
-    const row: ChannelVideoRow = {
-      videoId,
-      title: `Video ${videoId}`,
-      description: "",
-      views: 0,
-      likes: 0,
-      hashtags: [],
-      videoUrl: url,
-    };
+    try {
+      const res = await fetch("/api/fetch-videos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoUrls: [url], xlsLabel: "single_video" }),
+      });
 
-    setChannelRows([row]);
-    setSelectedVideoUrls([url]);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Error fetching video data.");
+        return;
+      }
+
+      setChannelRows(data.rows || []);
+      setSelectedVideoUrls((data.rows || []).map((r: ChannelVideoRow) => r.videoUrl));
+      if (data.savedFile) setCurrentXlsFile(data.savedFile);
+    } catch {
+      setError("Network error fetching video data.");
+    } finally {
+      setIsFetchingChannel(false);
+    }
   };
 
   const handleBatchFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

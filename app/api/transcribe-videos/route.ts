@@ -107,19 +107,19 @@ function getErrorSuffix(errorMsg: string): string {
 function buildTxtContent(meta: VideoMeta, transcript: string): string {
   return `Title: ${meta.title}
 
-Views: ${meta.views.toLocaleString("en-US")}
-
-Likes: ${meta.likes.toLocaleString("en-US")}
-
 Description: ${meta.description}
 
 Hashtags: ${meta.hashtags}
 
+Transcription: ${transcript}
+
+Views: ${meta.views.toLocaleString("en-US")}
+
+Likes: ${meta.likes.toLocaleString("en-US")}
+
 Link: ${meta.videoUrl}
 
-Date: ${meta.publishDate}
-
-Transcription: ${transcript}`;
+Date: ${meta.publishDate}`;
 }
 
 export async function POST(request: NextRequest) {

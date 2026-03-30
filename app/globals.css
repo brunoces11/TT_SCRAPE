@@ -192,10 +192,10 @@ h1 {
 
 /* ─── Buttons ─── */
 .btn {
-  padding: 0.6rem 1.2rem;
+  padding: 0.5rem 1rem;
   border: none;
   border-radius: 6px;
-  font-size: 0.9rem;
+  font-size: 0.84rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -231,8 +231,8 @@ h1 {
 .btn-transcript {
   background: linear-gradient(135deg, #6c5ce7, #a29bfe);
   color: #fff;
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
+  padding: 0.64rem 1.28rem;
+  font-size: 0.9375rem;
 }
 
 .btn-transcript:hover:not(:disabled) {
@@ -243,8 +243,8 @@ h1 {
 .btn-download {
   background: linear-gradient(135deg, #00b894, #00cec9);
   color: #fff;
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
+  padding: 0.64rem 1.28rem;
+  font-size: 0.9375rem;
 }
 
 .btn-download:hover:not(:disabled) {
@@ -255,8 +255,8 @@ h1 {
 .btn-download-all {
   background: linear-gradient(135deg, #6c5ce7, #a29bfe);
   color: #fff;
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
+  padding: 0.64rem 1.28rem;
+  font-size: 0.9375rem;
 }
 
 .btn-download-all:hover:not(:disabled) {
@@ -267,8 +267,8 @@ h1 {
 .btn-delete {
   background: linear-gradient(135deg, #d63031, #e17055);
   color: #fff;
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
+  padding: 0.64rem 1.28rem;
+  font-size: 0.9375rem;
 }
 
 .btn-delete:hover:not(:disabled) {
@@ -279,8 +279,8 @@ h1 {
 .btn-download-x5 {
   background: linear-gradient(135deg, #e17055, #fdcb6e);
   color: #fff;
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
+  padding: 0.64rem 1.28rem;
+  font-size: 0.9375rem;
 }
 
 .btn-download-x5:hover:not(:disabled) {
