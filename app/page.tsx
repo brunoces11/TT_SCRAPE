@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import ChannelForm from "@/components/ChannelForm";
 import type { SearchParams } from "@/components/ChannelForm";
 import VideoResultsTable from "@/components/VideoResultsTable";
@@ -31,13 +31,18 @@ export default function Home() {
   const [runAIStatus, setRunAIStatus] = useState<string | null>(null);
   const [transcriptActors, setTranscriptActors] = useState<{ id: string; name: string; default: boolean }[]>([]);
   const [selectedTranscriptActor, setSelectedTranscriptActor] = useState<string>("");
+  const [apifyAccounts, setApifyAccounts] = useState<{ id: string; label: string; default: boolean }[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const selectedAccountIdRef = useRef<string>("");
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [promptText, setPromptText] = useState("");
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
 
-  const fetchCredits = useCallback(async () => {
+  const fetchCredits = useCallback(async (accountId?: string) => {
     try {
-      const res = await fetch("/api/apify-credits");
+      const accId = accountId || selectedAccountIdRef.current;
+      const url = accId ? `/api/apify-credits?accountId=${accId}` : "/api/apify-credits";
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setApifyCredits(data);
@@ -48,7 +53,21 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    fetchCredits();
+    // Load Apify accounts
+    fetch("/api/apify-accounts")
+      .then((r) => r.json())
+      .then((data) => {
+        const accounts = data.accounts || [];
+        setApifyAccounts(accounts);
+        const defaultAcc = accounts.find((a: { default: boolean }) => a.default);
+        const accId = defaultAcc?.id || accounts[0]?.id || "";
+        if (accId) {
+          setSelectedAccountId(accId);
+          selectedAccountIdRef.current = accId;
+          fetchCredits(accId);
+        }
+      })
+      .catch(() => { fetchCredits(); });
     // Load actor config
     fetch("/api/apify-actors")
       .then((r) => r.json())
@@ -61,6 +80,13 @@ export default function Home() {
       })
       .catch(() => {});
   }, [fetchCredits]);
+
+  // ─── Account switch handler ───
+  const handleAccountChange = (newAccountId: string) => {
+    setSelectedAccountId(newAccountId);
+    selectedAccountIdRef.current = newAccountId;
+    fetchCredits(newAccountId);
+  };
 
   // ─── Prompt Modal helpers ───
   const handleOpenPrompt = async () => {
@@ -104,7 +130,7 @@ export default function Home() {
       const res = await fetch("/api/fetch-channel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params),
+        body: JSON.stringify({ ...params, accountId: selectedAccountId }),
       });
 
       const data = await res.json();
@@ -186,6 +212,7 @@ export default function Home() {
           videoUrls: urls,
           videosMeta: metaForUrls,
           actorId: selectedTranscriptActor,
+          accountId: selectedAccountId,
         }),
       });
 
@@ -313,7 +340,7 @@ export default function Home() {
     }
   };
 
-  // ─── Download All (transcripts + videos) — resilient ───
+  // ─── Download All (transcripts + videos) — resilient, sequential ───
   const handleDownloadAll = async () => {
     if (selectedVideoUrls.length === 0) {
       setError("Select at least one video.");
@@ -331,36 +358,54 @@ export default function Home() {
       // continue even if transcription fails
     }
 
-    // Step 2: Videos (always runs) — preserve transcript logs
-    try {
-      // Don't clear error/logs — handleDownloadVideos adds to existing logs
-      setIsDownloading(true);
-      setDownloadStatus(`Downloading ${selectedVideoUrls.length} video(s)... this may take a few minutes`);
+    // Step 2: Download each video individually (avoids timeout for large batches)
+    let totalOk = 0;
+    let totalFailed = 0;
+    const meta = getSelectedMeta();
 
-      const res = await fetch("/api/download-video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          videoUrls: selectedVideoUrls,
-          titles: getSelectedMeta().map((m) => m.title),
-        }),
-      });
+    for (let i = 0; i < selectedVideoUrls.length; i++) {
+      const url = selectedVideoUrls[i];
+      const title = meta[i]?.title || "";
 
-      const data = await res.json();
+      setDownloadStatus(`Downloading video ${i + 1} of ${selectedVideoUrls.length}...`);
 
-      if (data.results) {
-        const dlLogs = (data.results as { url: string; status: string; filename?: string; error?: string }[]).map(
-          (r) => r.status === "ok" ? `✅ ${r.filename}` : `❌ ${r.url.substring(0, 60)} — ${r.error}`
-        );
-        setDetailLogs((prev) => [...prev, ...dlLogs]);
+      try {
+        const res = await fetch("/api/download-video", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            videoUrls: [url],
+            titles: [title],
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setDetailLogs((prev) => [...prev, `❌ [DOWNLOAD] Video ${i + 1}: ${data.error || "Unknown error"}`]);
+          totalFailed++;
+          continue;
+        }
+
+        if (data.results) {
+          const dlLogs = (data.results as { url: string; status: string; filename?: string; error?: string }[]).map(
+            (r) => r.status === "ok" ? `✅ ${r.filename}` : `❌ ${r.url.substring(0, 60)} — ${r.error}`
+          );
+          setDetailLogs((prev) => [...prev, ...dlLogs]);
+
+          const okCount = data.results.filter((r: { status: string }) => r.status === "ok").length;
+          const failCount = data.results.filter((r: { status: string }) => r.status === "failed").length;
+          totalOk += okCount;
+          totalFailed += failCount;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        setDetailLogs((prev) => [...prev, `❌ [DOWNLOAD] Video ${i + 1}: Network error — ${msg}`]);
+        totalFailed++;
       }
-
-      setDownloadStatus(data.message || null);
-      setIsDownloading(false);
-    } catch {
-      setIsDownloading(false);
     }
 
+    setDownloadStatus(`Download completed: ${totalOk} file(s) succeeded, ${totalFailed} failure(s). Folder: downloads/`);
     setIsDownloadingAll(false);
   };
 
@@ -625,7 +670,7 @@ export default function Home() {
       const res = await fetch("/api/fetch-videos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoUrls: [url], xlsLabel: "single_video" }),
+        body: JSON.stringify({ videoUrls: [url], xlsLabel: "single_video", accountId: selectedAccountId }),
       });
 
       const data = await res.json();
@@ -698,7 +743,7 @@ export default function Home() {
         const res = await fetch("/api/fetch-videos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ videoUrls: valid, xlsLabel: fileName }),
+          body: JSON.stringify({ videoUrls: valid, xlsLabel: fileName, accountId: selectedAccountId }),
         });
 
         const data = await res.json();
@@ -745,6 +790,21 @@ export default function Home() {
               >
                 {transcriptActors.map((a) => (
                   <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {apifyAccounts.length > 1 && (
+            <div className="header-control-item">
+              <span className="header-control-label">API Account</span>
+              <select
+                className="actor-selector"
+                value={selectedAccountId}
+                onChange={(e) => handleAccountChange(e.target.value)}
+                title="Apify API account"
+              >
+                {apifyAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>{a.label}</option>
                 ))}
               </select>
             </div>

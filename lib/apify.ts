@@ -1,4 +1,5 @@
-const APIFY_TOKEN = process.env.APIFY_TOKEN!;
+import { getTokenForAccount } from "./apify-accounts";
+
 const BASE_URL = "https://api.apify.com/v2";
 
 const POLL_INTERVAL_MS = 5000;
@@ -10,13 +11,15 @@ function sleep(ms: number): Promise<void> {
 
 export async function runActorAndGetResults(
   actorId: string,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  accountId?: string
 ): Promise<unknown[]> {
+  const token = getTokenForAccount(accountId);
   // Apify API uses ~ instead of / in actor IDs (e.g. apidojo~tiktok-scraper)
   const actorIdForUrl = actorId.replace("/", "~");
 
   // 1. Start the actor run with waitForFinish=120
-  const runUrl = `${BASE_URL}/acts/${actorIdForUrl}/runs?token=${APIFY_TOKEN}&waitForFinish=120`;
+  const runUrl = `${BASE_URL}/acts/${actorIdForUrl}/runs?token=${token}&waitForFinish=120`;
 
   const runResponse = await fetch(runUrl, {
     method: "POST",
@@ -46,7 +49,7 @@ export async function runActorAndGetResults(
 
     await sleep(POLL_INTERVAL_MS);
 
-    const pollUrl = `${BASE_URL}/acts/${actorIdForUrl}/runs/${runId}?token=${APIFY_TOKEN}`;
+    const pollUrl = `${BASE_URL}/acts/${actorIdForUrl}/runs/${runId}?token=${token}`;
     const pollResponse = await fetch(pollUrl);
 
     if (!pollResponse.ok) {
@@ -65,7 +68,7 @@ export async function runActorAndGetResults(
     // Try to fetch the run log for more details
     let logSnippet = "";
     try {
-      const logUrl = `${BASE_URL}/acts/${actorIdForUrl}/runs/${runId}/log?token=${APIFY_TOKEN}`;
+      const logUrl = `${BASE_URL}/acts/${actorIdForUrl}/runs/${runId}/log?token=${token}`;
       const logResponse = await fetch(logUrl);
       if (logResponse.ok) {
         const fullLog = await logResponse.text();
@@ -88,7 +91,7 @@ export async function runActorAndGetResults(
     throw new Error("No dataset ID returned from actor run");
   }
 
-  const datasetUrl = `${BASE_URL}/datasets/${datasetId}/items?token=${APIFY_TOKEN}`;
+  const datasetUrl = `${BASE_URL}/datasets/${datasetId}/items?token=${token}`;
   const datasetResponse = await fetch(datasetUrl);
 
   if (!datasetResponse.ok) {

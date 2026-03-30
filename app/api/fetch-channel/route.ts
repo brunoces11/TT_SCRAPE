@@ -8,7 +8,7 @@ export const maxDuration = 300;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { channelUrl, keyword, hashtag, maxVideos = 50, countryCode = "BR" } = body;
+    const { channelUrl, keyword, hashtag, maxVideos = 50, countryCode = "BR", accountId } = body;
 
     if (!channelUrl && !keyword && !hashtag) {
       return NextResponse.json(
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const rawItems = await runActorAndGetResults(actorId, input);
+    const rawItems = await runActorAndGetResults(actorId, input, accountId);
     const allRows = normalizeChannelVideos(rawItems);
 
     // Filter out blacklisted videos

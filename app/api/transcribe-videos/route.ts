@@ -125,7 +125,7 @@ Date: ${meta.publishDate}`;
 export async function POST(request: NextRequest) {
   // Parse body outside try so it's accessible in catch for fallback file generation
   const body = await request.json();
-  const { videoUrls, videosMeta = [], actorId: requestedActorId } = body;
+  const { videoUrls, videosMeta = [], actorId: requestedActorId, accountId } = body;
   const debugLogs: string[] = [];
 
   try {
@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
       for (const url of cleanedUrls) {
         try {
           const input = { [actorConfig.inputUrlField]: url };
-          const items = await runActorAndGetResults(actorConfig.id, input);
+          const items = await runActorAndGetResults(actorConfig.id, input, accountId);
           rawItems.push(...items);
         } catch (singleErr) {
           const singleMsg = singleErr instanceof Error ? singleErr.message : "Unknown error";
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
     } else {
       // Array mode: 1 run with all URLs
       const input = { [actorConfig.inputUrlField]: cleanedUrls };
-      rawItems = await runActorAndGetResults(actorConfig.id, input);
+      rawItems = await runActorAndGetResults(actorConfig.id, input, accountId);
     }
 
     debugLogs.push(`[APIFY] rawItems count: ${rawItems.length}`);

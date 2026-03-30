@@ -1,11 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getTokenForAccount } from "@/lib/apify-accounts";
 
-const APIFY_TOKEN = process.env.APIFY_TOKEN!;
 const BASE_URL = "https://api.apify.com/v2";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const res = await fetch(`${BASE_URL}/users/me/limits?token=${APIFY_TOKEN}`);
+    const accountId = request.nextUrl.searchParams.get("accountId") || undefined;
+    const token = getTokenForAccount(accountId);
+
+    const res = await fetch(`${BASE_URL}/users/me/limits?token=${token}`);
     if (!res.ok) {
       return NextResponse.json({ error: `Apify API error (${res.status})` }, { status: 500 });
     }

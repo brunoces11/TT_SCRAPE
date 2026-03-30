@@ -8,7 +8,7 @@ export const maxDuration = 300;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { videoUrls, xlsLabel } = body;
+    const { videoUrls, xlsLabel, accountId } = body;
 
     if (!Array.isArray(videoUrls) || videoUrls.length === 0) {
       return NextResponse.json({ error: "No URLs provided." }, { status: 400 });
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     const actorId = "clockworks/tiktok-video-scraper";
     const input = { postURLs: videoUrls };
 
-    const rawItems = await runActorAndGetResults(actorId, input);
+    const rawItems = await runActorAndGetResults(actorId, input, accountId);
     const allRows = normalizeChannelVideos(rawItems);
 
     const blacklist = getBlacklist();
