@@ -66,7 +66,7 @@ h1 {
 
 .header-controls {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 0.5rem;
   flex-shrink: 0;
 }
@@ -691,4 +691,87 @@ tbody tr:last-child td {
   margin-top: 0.5rem;
   font-size: 0.82rem;
   color: var(--danger);
+}
+
+/* ─── Header Control Labels ─── */
+.header-control-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.header-control-label {
+  font-size: 0.62rem;
+  color: #555;
+  text-transform: lowercase;
+  letter-spacing: 0.3px;
+}
+
+/* ─── Prompt Button ─── */
+.btn-prompt {
+  background: var(--surface);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+  padding: 0.4rem 0.75rem;
+}
+
+.btn-prompt:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+/* ─── Prompt Modal ─── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 90%;
+  max-width: 700px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.prompt-textarea {
+  flex: 1;
+  background: var(--bg);
+  border: none;
+  color: var(--text);
+  font-family: monospace;
+  font-size: 0.82rem;
+  padding: 1rem;
+  resize: vertical;
+  outline: none;
+  line-height: 1.5;
+  min-height: 300px;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border);
 }

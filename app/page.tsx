@@ -31,6 +31,9 @@ export default function Home() {
   const [runAIStatus, setRunAIStatus] = useState<string | null>(null);
   const [transcriptActors, setTranscriptActors] = useState<{ id: string; name: string; default: boolean }[]>([]);
   const [selectedTranscriptActor, setSelectedTranscriptActor] = useState<string>("");
+  const [showPromptModal, setShowPromptModal] = useState(false);
+  const [promptText, setPromptText] = useState("");
+  const [isSavingPrompt, setIsSavingPrompt] = useState(false);
 
   const fetchCredits = useCallback(async () => {
     try {
@@ -58,6 +61,31 @@ export default function Home() {
       })
       .catch(() => {});
   }, [fetchCredits]);
+
+  // ─── Prompt Modal helpers ───
+  const handleOpenPrompt = async () => {
+    try {
+      const res = await fetch("/api/enrich-metadata/prompt");
+      if (res.ok) {
+        const data = await res.json();
+        setPromptText(data.prompt || "");
+      }
+    } catch { /* silent */ }
+    setShowPromptModal(true);
+  };
+
+  const handleSavePrompt = async () => {
+    setIsSavingPrompt(true);
+    try {
+      await fetch("/api/enrich-metadata/prompt", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: promptText }),
+      });
+    } catch { /* silent */ }
+    setIsSavingPrompt(false);
+    setShowPromptModal(false);
+  };
 
   // ─── Function 1: Fetch Channel ───
   const handleFetchChannel = async (params: SearchParams) => {
@@ -700,25 +728,64 @@ export default function Home() {
           <p className="subtitle">Local research tool — extract data and transcripts from TikTok channels</p>
         </div>
         <div className="header-controls">
+          <div className="header-control-item">
+            <span className="header-control-label">Config</span>
+            <button className="btn btn-prompt" onClick={handleOpenPrompt} title="Edit AI prompt">
+              Prompt
+            </button>
+          </div>
           {transcriptActors.length > 0 && (
-            <select
-              className="actor-selector"
-              value={selectedTranscriptActor}
-              onChange={(e) => setSelectedTranscriptActor(e.target.value)}
-              title="Transcript actor"
-            >
-              {transcriptActors.map((a) => (
-                <option key={a.id} value={a.id}>{a.name}</option>
-              ))}
-            </select>
+            <div className="header-control-item">
+              <span className="header-control-label">Transcription Actor</span>
+              <select
+                className="actor-selector"
+                value={selectedTranscriptActor}
+                onChange={(e) => setSelectedTranscriptActor(e.target.value)}
+                title="Transcript actor"
+              >
+                {transcriptActors.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </div>
           )}
           {apifyCredits && (
-            <div className="credits-badge" title={`Used: $${apifyCredits.usedUsd.toFixed(2)} / Limit: $${apifyCredits.limitUsd.toFixed(2)}`}>
-              💳 ${apifyCredits.remainingUsd.toFixed(2)}
+            <div className="header-control-item">
+              <span className="header-control-label">Credits</span>
+              <div className="credits-badge" title={`Used: $${apifyCredits.usedUsd.toFixed(2)} / Limit: $${apifyCredits.limitUsd.toFixed(2)}`}>
+                💳 ${apifyCredits.remainingUsd.toFixed(2)}
+              </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* ─── Prompt Modal ─── */}
+      {showPromptModal && (
+        <div className="modal-overlay" onClick={() => setShowPromptModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span>Edit AI Prompt</span>
+              <button onClick={() => setShowPromptModal(false)} className="error-dismiss">✕</button>
+            </div>
+            <textarea
+              className="prompt-textarea"
+              value={promptText}
+              onChange={(e) => setPromptText(e.target.value)}
+              rows={16}
+              placeholder="Enter the system prompt for AI enrichment..."
+            />
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={handleSavePrompt} disabled={isSavingPrompt}>
+                {isSavingPrompt ? "Saving..." : "Save"}
+              </button>
+              <button className="btn btn-csv" onClick={() => setShowPromptModal(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Channel Form ─── */}
       <ChannelForm onSubmit={handleFetchChannel} isLoading={isFetchingChannel} />

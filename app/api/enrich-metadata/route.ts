@@ -83,6 +83,17 @@ Rules:
 - Return ONLY valid JSON in the exact format specified
 - Process ALL items in the array and return ALL of them with the same videoId`;
 
+const PROMPT_FILE = path.join(process.cwd(), "ai-prompt.txt");
+
+function getSystemPrompt(): string {
+  try {
+    if (fs.existsSync(PROMPT_FILE)) {
+      return fs.readFileSync(PROMPT_FILE, "utf-8");
+    }
+  } catch { /* fallback */ }
+  return SYSTEM_PROMPT;
+}
+
 async function callOpenAI(videos: VideoForLLM[]): Promise<LLMResponse> {
   const userPrompt = `Process the following videos and return enriched versions:\n\n${JSON.stringify({ videos }, null, 2)}\n\nReturn JSON with format: { "videos": [{ "videoId": "...", "title": "...", "description": "...", "hashtags": "...", "transcription": "..." }] }`;
 
@@ -96,7 +107,7 @@ async function callOpenAI(videos: VideoForLLM[]): Promise<LLMResponse> {
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: getSystemPrompt() },
         { role: "user", content: userPrompt },
       ],
       temperature: 0.8,
