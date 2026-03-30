@@ -416,15 +416,47 @@ export default function Home() {
 
     setIsRunningAI(true);
     setError(null);
-    setRunAIStatus(`Preparing ${selectedVideoUrls.length} video(s) for AI enrichment...`);
+    setRunAIStatus(`Checking existing transcriptions...`);
 
-    // Step 1: Check which selected videos already have transcriptions
-    const existingTranscripts = new Map(
-      transcriptRows.map((r) => [r.videoUrl, r])
+    // Step 1: Check memory (transcriptRows) for existing transcriptions
+    const memoryTranscripts = new Map(
+      transcriptRows.map((r) => [r.videoUrl, r.transcript])
     );
-    const faltantes = selectedVideoUrls.filter((url) => !existingTranscripts.has(url));
 
-    // Step 2: Transcribe missing videos if any
+    // Step 2: For videos not in memory, check disk via backend
+    const notInMemory = selectedVideoUrls.filter((url) => !memoryTranscripts.has(url));
+    const diskTranscripts = new Map<string, string>();
+
+    if (notInMemory.length > 0) {
+      try {
+        const checkPayload = notInMemory.map((url) => {
+          const row = channelRows.find((r) => r.videoUrl === url);
+          return { title: row?.title || "", videoUrl: url };
+        });
+        const checkRes = await fetch("/api/check-transcripts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ videos: checkPayload }),
+        });
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          for (const item of checkData.results || []) {
+            if (item.found && item.transcription) {
+              diskTranscripts.set(item.videoUrl, item.transcription);
+            }
+          }
+        }
+      } catch {
+        // If check fails, we'll just download the transcriptions
+      }
+    }
+
+    // Step 3: Determine which videos still need transcription
+    const faltantes = selectedVideoUrls.filter(
+      (url) => !memoryTranscripts.has(url) && !diskTranscripts.has(url)
+    );
+
+    // Step 4: Transcribe only the missing ones
     let newTranscripts: TranscriptRow[] = [];
     if (faltantes.length > 0) {
       setRunAIStatus(`Transcribing ${faltantes.length} missing video(s)...`);
@@ -435,30 +467,30 @@ export default function Home() {
       }
     }
 
-    // Step 3: Combine all transcripts (existing + new)
-    const allTranscripts = new Map(existingTranscripts);
-    for (const row of newTranscripts) {
-      allTranscripts.set(row.videoUrl, row);
-    }
+    // Step 5: Combine all transcription sources (memory + disk + new)
+    const allTranscriptions = new Map<string, string>();
+    for (const [url, t] of memoryTranscripts) allTranscriptions.set(url, t);
+    for (const [url, t] of diskTranscripts) allTranscriptions.set(url, t);
+    for (const row of newTranscripts) allTranscriptions.set(row.videoUrl, row.transcript);
 
-    // Step 4: Build payload
+    // Step 6: Build payload
     setRunAIStatus(`Sending ${selectedVideoUrls.length} video(s) to AI...`);
 
     const videosForLLM = selectedVideoUrls.map((url) => {
       const row = channelRows.find((r) => r.videoUrl === url);
-      const transcript = allTranscripts.get(url);
+      const transcription = allTranscriptions.get(url) || "ERRO: Transcription not available";
       return {
         videoId: row?.videoId || "",
         title: row?.title || "",
         description: row?.description || "",
         hashtags: row?.hashtags?.join(", ") || "",
-        transcription: transcript?.transcript || "ERRO: Transcription not available",
+        transcription,
       };
     });
 
     const videosMetaFull = selectedVideoUrls.map((url) => {
       const row = channelRows.find((r) => r.videoUrl === url);
-      const transcript = allTranscripts.get(url);
+      const transcription = allTranscriptions.get(url) || "ERRO: Transcription not available";
       return {
         videoId: row?.videoId || "",
         title: row?.title || "",
@@ -468,7 +500,7 @@ export default function Home() {
         hashtags: row?.hashtags?.join(", ") || "",
         videoUrl: url,
         publishDate: row?.publishDate || "",
-        transcription: transcript?.transcript || "ERRO: Transcription not available",
+        transcription,
       };
     });
 
