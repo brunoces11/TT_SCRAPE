@@ -288,6 +288,18 @@ h1 {
   box-shadow: 0 4px 15px rgba(225, 112, 85, 0.4);
 }
 
+.btn-run-ai {
+  background: linear-gradient(135deg, #0984e3, #74b9ff);
+  color: #fff;
+  padding: 0.64rem 1.28rem;
+  font-size: 0.9375rem;
+}
+
+.btn-run-ai:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(9, 132, 227, 0.4);
+}
+
 /* ─── Action Bar ─── */
 .action-bar {
   display: flex;

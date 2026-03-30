@@ -27,6 +27,8 @@ export default function Home() {
   const [isDownloadingX5, setIsDownloadingX5] = useState(false);
   const [downloadX5Status, setDownloadX5Status] = useState<string | null>(null);
   const [apifyCredits, setApifyCredits] = useState<{ usedUsd: number; limitUsd: number; remainingUsd: number } | null>(null);
+  const [isRunningAI, setIsRunningAI] = useState(false);
+  const [runAIStatus, setRunAIStatus] = useState<string | null>(null);
   const [transcriptActors, setTranscriptActors] = useState<{ id: string; name: string; default: boolean }[]>([]);
   const [selectedTranscriptActor, setSelectedTranscriptActor] = useState<string>("");
 
@@ -116,17 +118,35 @@ export default function Home() {
     });
 
   // ─── Function 2: Fetch Transcripts + save .txt ───
-  const handleTranscribe = async () => {
-    if (selectedVideoUrls.length === 0) {
+  const handleTranscribe = async (urlsOverride?: string[]): Promise<TranscriptRow[]> => {
+    const urls = urlsOverride || selectedVideoUrls;
+    if (urls.length === 0) {
       setError("Select at least one video.");
-      return;
+      return [];
     }
+
+    // Build meta for the URLs being transcribed
+    const metaForUrls = urls.map((url) => {
+      const row = channelRows.find((r) => r.videoUrl === url);
+      return {
+        title: row?.title || "",
+        views: row?.views || 0,
+        likes: row?.likes || 0,
+        comments: row?.comments || 0,
+        description: row?.description || "",
+        hashtags: row?.hashtags?.join(", ") || "",
+        videoUrl: url,
+        publishDate: row?.publishDate || "",
+      };
+    });
 
     setError(null);
     setIsTranscribing(true);
-    setTranscriptRows([]);
-    setDetailLogs([]);
-    setTranscriptStatus(`Transcribing ${selectedVideoUrls.length} video(s)... this may take a few minutes`);
+    if (!urlsOverride) {
+      setTranscriptRows([]);
+      setDetailLogs([]);
+    }
+    setTranscriptStatus(`Transcribing ${urls.length} video(s)... this may take a few minutes`);
 
     const creditsBefore = await fetchCredits();
 
@@ -135,8 +155,8 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          videoUrls: selectedVideoUrls,
-          videosMeta: getSelectedMeta(),
+          videoUrls: urls,
+          videosMeta: metaForUrls,
           actorId: selectedTranscriptActor,
         }),
       });
@@ -147,18 +167,29 @@ export default function Home() {
         setError(data.error || "Error fetching transcripts.");
         if (data.debugLogs) setDetailLogs(data.debugLogs);
         setTranscriptStatus(null);
-        return;
+        return [];
       }
 
       // Handle Apify actor failure (returned as 200 with actorFailed flag)
       if (data.actorFailed) {
         setTranscriptStatus("⚠️ Transcription service failed to process video(s) — may be private, removed, or unsupported");
         if (data.debugLogs) setDetailLogs(data.debugLogs);
-        return;
+        return [];
       }
 
       const normalized = normalizeTranscripts(data.rawItems || [], channelRows);
-      setTranscriptRows(normalized);
+      if (!urlsOverride) {
+        setTranscriptRows(normalized);
+      } else {
+        // Merge new transcripts with existing ones
+        setTranscriptRows((prev) => {
+          const existing = new Map(prev.map((r) => [r.videoUrl, r]));
+          for (const row of normalized) {
+            existing.set(row.videoUrl, row);
+          }
+          return Array.from(existing.values());
+        });
+      }
 
       // Collect logs for UI display
       const logs: string[] = [];
@@ -176,7 +207,7 @@ export default function Home() {
       const saved = data.savedFiles?.length || 0;
       const noTranscript = data.noTranscript?.length || 0;
       const errorCount = data.errors?.length || 0;
-      const total = selectedVideoUrls.length;
+      const total = urls.length;
 
       // Build clear status message
       const parts: string[] = [];
@@ -190,10 +221,13 @@ export default function Home() {
         statusMsg += ` — no video has a transcript available (no speech/subtitles detected)`;
       }
       setTranscriptStatus(statusMsg);
+
+      return normalized;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
       setError(`Network error: ${msg}`);
       setTranscriptStatus(null);
+      return [];
     } finally {
       setIsTranscribing(false);
       const creditsAfter = await fetchCredits();
@@ -371,6 +405,105 @@ export default function Home() {
 
     setDownloadX5Status(`Download x5 completed: ${totalOk} file(s) succeeded, ${totalFailed} failure(s). Folder: downloads/`);
     setIsDownloadingX5(false);
+  };
+
+  // ─── Run AI: enrich metadata via LLM ───
+  const handleRunAI = async () => {
+    if (selectedVideoUrls.length === 0) {
+      setError("Select at least one video.");
+      return;
+    }
+
+    setIsRunningAI(true);
+    setError(null);
+    setRunAIStatus(`Preparing ${selectedVideoUrls.length} video(s) for AI enrichment...`);
+
+    // Step 1: Check which selected videos already have transcriptions
+    const existingTranscripts = new Map(
+      transcriptRows.map((r) => [r.videoUrl, r])
+    );
+    const faltantes = selectedVideoUrls.filter((url) => !existingTranscripts.has(url));
+
+    // Step 2: Transcribe missing videos if any
+    let newTranscripts: TranscriptRow[] = [];
+    if (faltantes.length > 0) {
+      setRunAIStatus(`Transcribing ${faltantes.length} missing video(s)...`);
+      try {
+        newTranscripts = await handleTranscribe(faltantes);
+      } catch {
+        // continue even if transcription fails
+      }
+    }
+
+    // Step 3: Combine all transcripts (existing + new)
+    const allTranscripts = new Map(existingTranscripts);
+    for (const row of newTranscripts) {
+      allTranscripts.set(row.videoUrl, row);
+    }
+
+    // Step 4: Build payload
+    setRunAIStatus(`Sending ${selectedVideoUrls.length} video(s) to AI...`);
+
+    const videosForLLM = selectedVideoUrls.map((url) => {
+      const row = channelRows.find((r) => r.videoUrl === url);
+      const transcript = allTranscripts.get(url);
+      return {
+        videoId: row?.videoId || "",
+        title: row?.title || "",
+        description: row?.description || "",
+        hashtags: row?.hashtags?.join(", ") || "",
+        transcription: transcript?.transcript || "ERRO: Transcription not available",
+      };
+    });
+
+    const videosMetaFull = selectedVideoUrls.map((url) => {
+      const row = channelRows.find((r) => r.videoUrl === url);
+      const transcript = allTranscripts.get(url);
+      return {
+        videoId: row?.videoId || "",
+        title: row?.title || "",
+        views: row?.views || 0,
+        likes: row?.likes || 0,
+        description: row?.description || "",
+        hashtags: row?.hashtags?.join(", ") || "",
+        videoUrl: url,
+        publishDate: row?.publishDate || "",
+        transcription: transcript?.transcript || "ERRO: Transcription not available",
+      };
+    });
+
+    // Step 5: Call enrich-metadata API
+    try {
+      const res = await fetch("/api/enrich-metadata", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videos: videosForLLM, videosMeta: videosMetaFull }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Error enriching metadata.");
+        if (data.debugLogs) setDetailLogs((prev) => [...prev, ...(data.debugLogs as string[])]);
+        setRunAIStatus(null);
+        setIsRunningAI(false);
+        return;
+      }
+
+      if (data.debugLogs) {
+        setDetailLogs((prev) => [...prev, ...(data.debugLogs as string[])]);
+      }
+
+      const saved = data.savedFiles?.length || 0;
+      const errorCount = data.errors?.length || 0;
+      setRunAIStatus(`AI enrichment completed: ${saved} file(s) saved, ${errorCount} error(s). Folder: downloads/`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      setError(`Network error: ${msg}`);
+      setRunAIStatus(null);
+    } finally {
+      setIsRunningAI(false);
+    }
   };
 
   // ─── Delete selected rows from UI + XLSX ───
@@ -608,8 +741,8 @@ export default function Home() {
           <div className="transcript-actions">
             <button
               className="btn btn-transcript"
-              onClick={handleTranscribe}
-              disabled={isTranscribing || isDownloadingX5 || selectedVideoUrls.length === 0}
+              onClick={() => handleTranscribe()}
+              disabled={isTranscribing || isDownloadingX5 || isRunningAI || selectedVideoUrls.length === 0}
             >
               {isTranscribing ? "Downloading..." : "📝 Download Transcript"}
             </button>
@@ -617,15 +750,23 @@ export default function Home() {
             <button
               className="btn btn-download"
               onClick={handleDownloadVideos}
-              disabled={isDownloading || isDownloadingX5 || selectedVideoUrls.length === 0}
+              disabled={isDownloading || isDownloadingX5 || isRunningAI || selectedVideoUrls.length === 0}
             >
               {isDownloading ? "Downloading..." : "⬇️ Download selected videos"}
             </button>
 
             <button
+              className="btn btn-run-ai"
+              onClick={handleRunAI}
+              disabled={isRunningAI || isDownloadingAll || isTranscribing || isDownloading || isDownloadingX5 || selectedVideoUrls.length === 0}
+            >
+              {isRunningAI ? "Running AI..." : "🤖 Run AI"}
+            </button>
+
+            <button
               className="btn btn-download-all"
               onClick={handleDownloadAll}
-              disabled={isDownloadingAll || isTranscribing || isDownloading || isDownloadingX5 || selectedVideoUrls.length === 0}
+              disabled={isDownloadingAll || isTranscribing || isDownloading || isDownloadingX5 || isRunningAI || selectedVideoUrls.length === 0}
             >
               {isDownloadingAll ? "Downloading all..." : "📦 Download all"}
             </button>
@@ -633,7 +774,7 @@ export default function Home() {
             <button
               className="btn btn-download-x5"
               onClick={handleDownloadX5}
-              disabled={isDownloadingX5 || isDownloadingAll || isTranscribing || isDownloading || selectedVideoUrls.length === 0}
+              disabled={isDownloadingX5 || isDownloadingAll || isTranscribing || isDownloading || isRunningAI || selectedVideoUrls.length === 0}
             >
               {isDownloadingX5 ? "Downloading x5..." : "🔥 Download all x5"}
             </button>
@@ -674,6 +815,20 @@ export default function Home() {
       {!isDownloadingX5 && downloadX5Status && (
         <div className="transcript-summary">
           {downloadX5Status}
+        </div>
+      )}
+
+      {/* ─── Run AI Status ─── */}
+      {isRunningAI && runAIStatus && (
+        <div className="loading">
+          <div className="spinner" />
+          {runAIStatus}
+        </div>
+      )}
+
+      {!isRunningAI && runAIStatus && (
+        <div className="transcript-summary">
+          {runAIStatus}
         </div>
       )}
 
