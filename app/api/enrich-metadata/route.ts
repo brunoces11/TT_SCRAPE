@@ -29,8 +29,10 @@ function buildFilePrefix(views: number, publishDate: string): string {
       datePart = `${mmm}${aa}`;
     }
   }
-  const viewsPart = String(views || 0);
-  return datePart ? `${viewsPart}-${datePart}-` : `${viewsPart}-`;
+  const v = views || 0;
+  const tier = v >= 10_000_000 ? "A1" : v >= 1_000_000 ? "A2" : "A3";
+  const viewsPart = String(v);
+  return datePart ? `${tier}_${viewsPart}-${datePart}-` : `${tier}_${viewsPart}-`;
 }
 
 interface VideoForLLM {
