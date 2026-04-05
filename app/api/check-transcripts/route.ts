@@ -14,6 +14,22 @@ function sanitizeFilename(title: string): string {
     .substring(0, 100);
 }
 
+const MONTH_ABBR = ["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"];
+
+function buildFilePrefix(views: number, publishDate: string): string {
+  let datePart = "";
+  if (publishDate) {
+    const d = new Date(publishDate);
+    if (!isNaN(d.getTime())) {
+      const mmm = MONTH_ABBR[d.getMonth()];
+      const aa = String(d.getFullYear()).slice(-2);
+      datePart = `${mmm}${aa}`;
+    }
+  }
+  const viewsPart = String(views || 0);
+  return datePart ? `${viewsPart}-${datePart}-` : `${viewsPart}-`;
+}
+
 function extractTranscription(content: string): string {
   const match = content.match(/^Transcription:\s*(.*)$/m);
   if (!match) return "";
@@ -29,7 +45,7 @@ function extractTranscription(content: string): string {
 export async function POST(request: NextRequest) {
   try {
     const { videos } = await request.json() as {
-      videos: { title: string; videoUrl: string }[];
+      videos: { title: string; videoUrl: string; views?: number; publishDate?: string }[];
     };
 
     if (!Array.isArray(videos) || videos.length === 0) {
@@ -48,9 +64,12 @@ export async function POST(request: NextRequest) {
       const safeName = sanitizeFilename(v.title);
       if (!safeName) return { videoUrl: v.videoUrl, found: false, transcription: null };
 
-      // Find txt files that start with this safeName
+      const prefix = buildFilePrefix(v.views || 0, v.publishDate || "");
+      const fullName = `${prefix}${safeName}`;
+
+      // Find txt files that start with this fullName
       const matches = allFiles.filter(
-        (f) => f.startsWith(safeName) && f.endsWith(".txt")
+        (f) => f.startsWith(fullName) && f.endsWith(".txt")
       );
 
       if (matches.length === 1) {

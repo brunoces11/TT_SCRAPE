@@ -63,6 +63,22 @@ function sanitizeFilename(title: string): string {
     .substring(0, 100);
 }
 
+const MONTH_ABBR = ["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"];
+
+function buildFilePrefix(views: number, publishDate: string): string {
+  let datePart = "";
+  if (publishDate) {
+    const d = new Date(publishDate);
+    if (!isNaN(d.getTime())) {
+      const mmm = MONTH_ABBR[d.getMonth()];
+      const aa = String(d.getFullYear()).slice(-2);
+      datePart = `${mmm}${aa}`;
+    }
+  }
+  const viewsPart = String(views || 0);
+  return datePart ? `${viewsPart}-${datePart}-` : `${viewsPart}-`;
+}
+
 function cleanWebVtt(raw: string): string {
   return raw
     .replace(/^WEBVTT\s*/i, "")
@@ -223,6 +239,8 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
+        const prefix = buildFilePrefix(meta.views, meta.publishDate);
+
         // Determine transcript content or error message
         let transcriptField: string;
         let errorSuffix = "";
@@ -245,7 +263,7 @@ export async function POST(request: NextRequest) {
         }
 
         const txtContent = buildTxtContent(meta, transcriptField);
-        const fileName = `${safeName}${errorSuffix}.txt`;
+        const fileName = `${prefix}${safeName}${errorSuffix}.txt`;
         const txtPath = path.join(DOWNLOAD_DIR, fileName);
         fs.writeFileSync(txtPath, txtContent, "utf-8");
         savedFiles.push(fileName);
@@ -274,9 +292,10 @@ export async function POST(request: NextRequest) {
       if (!meta || !meta.title) continue;
       const safeName = sanitizeFilename(meta.title);
       if (!safeName) continue;
+      const prefix = buildFilePrefix(meta.views, meta.publishDate);
       const errorSuffix = getErrorSuffix(msg);
       const txtContent = buildTxtContent(meta, `ERRO: Apify actor failed — ${msg}`);
-      const fileName = `${safeName}${errorSuffix}.txt`;
+      const fileName = `${prefix}${safeName}${errorSuffix}.txt`;
       const txtPath = path.join(DOWNLOAD_DIR, fileName);
       fs.writeFileSync(txtPath, txtContent, "utf-8");
       fallbackSaved.push(fileName);

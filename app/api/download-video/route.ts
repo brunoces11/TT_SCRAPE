@@ -20,6 +20,22 @@ function sanitizeFilename(title: string): string {
     .substring(0, 100);             // limita tamanho
 }
 
+const MONTH_ABBR = ["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"];
+
+function buildFilePrefix(views: number, publishDate: string): string {
+  let datePart = "";
+  if (publishDate) {
+    const d = new Date(publishDate);
+    if (!isNaN(d.getTime())) {
+      const mmm = MONTH_ABBR[d.getMonth()];
+      const aa = String(d.getFullYear()).slice(-2);
+      datePart = `${mmm}${aa}`;
+    }
+  }
+  const viewsPart = String(views || 0);
+  return datePart ? `${viewsPart}-${datePart}-` : `${viewsPart}-`;
+}
+
 function generateRandomParams() {
   return {
     crf: Math.floor(Math.random() * 5) + 28,           // 28-32 (próximo do original TikTok)
@@ -32,7 +48,7 @@ function generateRandomParams() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { videoUrls, titles, mode } = await req.json();
+    const { videoUrls, titles, mode, viewsList, publishDates } = await req.json();
 
     if (!Array.isArray(videoUrls) || videoUrls.length === 0) {
       return NextResponse.json({ error: "No URL provided." }, { status: 400 });
@@ -47,6 +63,8 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < videoUrls.length; i++) {
       const url = videoUrls[i];
       const rawTitle = titles?.[i] || "";
+      const views = viewsList?.[i] || 0;
+      const publishDate = publishDates?.[i] || "";
 
       try {
         // Step 1: Download with yt-dlp to a temp file
@@ -68,24 +86,25 @@ export async function POST(req: NextRequest) {
 
         const tempPath = path.join(DOWNLOAD_DIR, tempFound);
         const safeName = sanitizeFilename(rawTitle) || videoId;
+        const prefix = buildFilePrefix(views, publishDate);
 
         if (mode === "x5") {
           // --- x5 mode: original copy + 5 ffmpeg variants ---
 
           // Copy original (no ffmpeg processing)
-          const origPath = path.join(DOWNLOAD_DIR, `${safeName}_ORIG.mp4`);
+          const origPath = path.join(DOWNLOAD_DIR, `${prefix}${safeName}_ORIG.mp4`);
           fs.copyFileSync(tempPath, origPath);
-          results.push({ url, status: "ok", filename: `${safeName}_ORIG.mp4`, variant: "ORIG" });
+          results.push({ url, status: "ok", filename: `${prefix}${safeName}_ORIG.mp4`, variant: "ORIG" });
 
           // Generate 5 variants
           for (let v = 1; v <= 5; v++) {
             const variantLabel = `v${String(v).padStart(2, "0")}`;
-            const variantPath = path.join(DOWNLOAD_DIR, `${safeName}_${variantLabel}.mp4`);
+            const variantPath = path.join(DOWNLOAD_DIR, `${prefix}${safeName}_${variantLabel}.mp4`);
             try {
               const p = generateRandomParams();
               const ffmpegCmd = `ffmpeg -y -i "${tempPath}" -map_metadata -1 -vf "scale=iw*${p.scaleFactor}:ih*${p.scaleFactor},crop=iw/${p.scaleFactor}:ih/${p.scaleFactor},noise=alls=${p.noise}:allf=t,setpts=${(1 / p.speed).toFixed(6)}*PTS" -af "atempo=${p.speed.toFixed(4)},asetrate=44100*${p.pitch.toFixed(4)},aresample=44100" -c:v libx264 -preset veryfast -crf ${p.crf} -c:a aac -b:a 64k -movflags +faststart "${variantPath}"`;
               await execAsync(ffmpegCmd, { timeout: 600000 });
-              results.push({ url, status: "ok", filename: `${safeName}_${variantLabel}.mp4`, variant: variantLabel });
+              results.push({ url, status: "ok", filename: `${prefix}${safeName}_${variantLabel}.mp4`, variant: variantLabel });
             } catch (varErr: unknown) {
               const varMsg = varErr instanceof Error ? varErr.message : "Unknown error";
               console.error(`Error generating variant ${variantLabel} for ${safeName}:`, varMsg);
@@ -99,7 +118,7 @@ export async function POST(req: NextRequest) {
           }
         } else {
           // --- Default mode: existing behavior unchanged ---
-          const finalPath = path.join(DOWNLOAD_DIR, `${safeName}.mp4`);
+          const finalPath = path.join(DOWNLOAD_DIR, `${prefix}${safeName}.mp4`);
 
           // Step 2: Convert to H.264 with ffmpeg
           // - strip metadata (-map_metadata -1)
@@ -115,7 +134,7 @@ export async function POST(req: NextRequest) {
             fs.unlinkSync(tempPath);
           }
 
-          results.push({ url, status: "ok", filename: `${safeName}.mp4` });
+          results.push({ url, status: "ok", filename: `${prefix}${safeName}.mp4` });
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Unknown error";

@@ -17,13 +17,31 @@ function sanitizeFilename(title: string): string {
     .substring(0, 100);
 }
 
+const MONTH_ABBR = ["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"];
+
+function buildFilePrefix(views: number, publishDate: string): string {
+  let datePart = "";
+  if (publishDate) {
+    const d = new Date(publishDate);
+    if (!isNaN(d.getTime())) {
+      const mmm = MONTH_ABBR[d.getMonth()];
+      const aa = String(d.getFullYear()).slice(-2);
+      datePart = `${mmm}${aa}`;
+    }
+  }
+  const viewsPart = String(views || 0);
+  return datePart ? `${viewsPart}-${datePart}-` : `${viewsPart}-`;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { text, title, accountId, voiceId } = (await request.json()) as {
+    const { text, title, accountId, voiceId, views, publishDate } = (await request.json()) as {
       text: string;
       title: string;
       accountId?: string;
       voiceId: string;
+      views?: number;
+      publishDate?: string;
     };
 
     const token = getTokenForElevenLabsAccount(accountId);
@@ -55,7 +73,8 @@ export async function POST(request: NextRequest) {
       fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
     }
 
-    const filename = `${sanitizeFilename(title)}.mp3`;
+    const prefix = buildFilePrefix(views || 0, publishDate || "");
+    const filename = `${prefix}${sanitizeFilename(title)}.mp3`;
     fs.writeFileSync(path.join(DOWNLOAD_DIR, filename), buffer);
 
     return NextResponse.json({ status: "ok", filename });

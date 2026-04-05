@@ -17,6 +17,22 @@ function sanitizeFilename(title: string): string {
     .substring(0, 100);
 }
 
+const MONTH_ABBR = ["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"];
+
+function buildFilePrefix(views: number, publishDate: string): string {
+  let datePart = "";
+  if (publishDate) {
+    const d = new Date(publishDate);
+    if (!isNaN(d.getTime())) {
+      const mmm = MONTH_ABBR[d.getMonth()];
+      const aa = String(d.getFullYear()).slice(-2);
+      datePart = `${mmm}${aa}`;
+    }
+  }
+  const viewsPart = String(views || 0);
+  return datePart ? `${viewsPart}-${datePart}-` : `${viewsPart}-`;
+}
+
 interface VideoForLLM {
   videoId: string;
   title: string;
@@ -192,11 +208,12 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
+        const prefix = buildFilePrefix(meta.views, meta.publishDate);
         const txtContent = buildEnrichedTxtContent(llmItem, meta);
-        const txtPath = path.join(DOWNLOAD_DIR, `${safeName}.txt`);
+        const txtPath = path.join(DOWNLOAD_DIR, `${prefix}${safeName}.txt`);
         fs.writeFileSync(txtPath, txtContent, "utf-8");
-        savedFiles.push(`${safeName}.txt`);
-        debugLogs.push(`[SAVED] ${safeName}.txt (${txtContent.length} chars)`);
+        savedFiles.push(`${prefix}${safeName}.txt`);
+        debugLogs.push(`[SAVED] ${prefix}${safeName}.txt (${txtContent.length} chars)`);
       } catch (e) {
         const msg = e instanceof Error ? e.message : "unknown";
         errors.push(msg);

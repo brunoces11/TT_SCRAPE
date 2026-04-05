@@ -361,6 +361,8 @@ export default function Home() {
         body: JSON.stringify({
           videoUrls: selectedVideoUrls,
           titles: getSelectedMeta().map((m) => m.title),
+          viewsList: getSelectedMeta().map((m) => m.views),
+          publishDates: getSelectedMeta().map((m) => m.publishDate),
         }),
       });
 
@@ -415,7 +417,7 @@ export default function Home() {
       try {
         const checkPayload = notInMemory.map((url) => {
           const row = channelRows.find((r) => r.videoUrl === url);
-          return { title: row?.title || "", videoUrl: url };
+          return { title: row?.title || "", videoUrl: url, views: row?.views || 0, publishDate: row?.publishDate || "" };
         });
         const checkRes = await fetch("/api/check-transcripts", {
           method: "POST",
@@ -516,6 +518,7 @@ export default function Home() {
     if (llmVideos.length > 0) {
       for (let i = 0; i < llmVideos.length; i++) {
         const item = llmVideos[i];
+        const rowMeta = channelRows.find((r) => r.videoId === item.videoId);
 
         if (item.transcription.startsWith("ERRO:")) {
           ttsSkipped++;
@@ -534,6 +537,8 @@ export default function Home() {
               title: item.title,
               accountId: selectedElevenLabsAccountId,
               voiceId: selectedVoiceId,
+              views: rowMeta?.views || 0,
+              publishDate: rowMeta?.publishDate || "",
             }),
           });
 
@@ -577,6 +582,8 @@ export default function Home() {
           body: JSON.stringify({
             videoUrls: [url],
             titles: [title],
+            viewsList: [meta[i]?.views || 0],
+            publishDates: [meta[i]?.publishDate || ""],
           }),
         });
 
@@ -648,6 +655,8 @@ export default function Home() {
             videoUrls: [url],
             titles: [title],
             mode: "x5",
+            viewsList: [meta[i]?.views || 0],
+            publishDates: [meta[i]?.publishDate || ""],
           }),
         });
 
@@ -705,7 +714,7 @@ export default function Home() {
       try {
         const checkPayload = notInMemory.map((url) => {
           const row = channelRows.find((r) => r.videoUrl === url);
-          return { title: row?.title || "", videoUrl: url };
+          return { title: row?.title || "", videoUrl: url, views: row?.views || 0, publishDate: row?.publishDate || "" };
         });
         const checkRes = await fetch("/api/check-transcripts", {
           method: "POST",
@@ -812,6 +821,7 @@ export default function Home() {
       if (llmVideos.length > 0) {
         for (let i = 0; i < llmVideos.length; i++) {
           const item = llmVideos[i] as { videoId: string; title: string; transcription: string };
+          const rowMeta = channelRows.find((r) => r.videoId === item.videoId);
 
           if (item.transcription.startsWith("ERRO:")) {
             ttsSkipped++;
@@ -830,6 +840,8 @@ export default function Home() {
                 title: item.title,
                 accountId: selectedElevenLabsAccountId,
                 voiceId: selectedVoiceId,
+                views: rowMeta?.views || 0,
+                publishDate: rowMeta?.publishDate || "",
               }),
             });
 
