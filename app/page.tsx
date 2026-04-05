@@ -37,6 +37,7 @@ export default function Home() {
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [promptText, setPromptText] = useState("");
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
+  const [resultLabel, setResultLabel] = useState<string>("");
   const [elevenlabsAccounts, setElevenlabsAccounts] = useState<{ id: string; label: string; default: boolean }[]>([]);
   const [selectedElevenLabsAccountId, setSelectedElevenLabsAccountId] = useState<string>("");
   const selectedElevenLabsAccountIdRef = useRef<string>("");
@@ -172,6 +173,13 @@ export default function Home() {
     setChannelRows([]);
     setSelectedVideoUrls([]);
     setTranscriptRows([]);
+
+    // Build dynamic label from search params
+    const labelParts: string[] = [];
+    if (params.channelUrl) labelParts.push(params.channelUrl.replace(/^https?:\/\/(www\.)?tiktok\.com\/@?/, "@").replace(/\/$/, ""));
+    if (params.keyword) labelParts.push(`"${params.keyword}"`);
+    if (params.hashtag) labelParts.push(`#${params.hashtag}`);
+    setResultLabel(labelParts.join(" · ") || "Search");
     setDetailLogs([]);
 
     const creditsBefore = await fetchCredits();
@@ -935,6 +943,7 @@ export default function Home() {
     setIsFetchingChannel(true);
     setChannelRows([]);
     setSelectedVideoUrls([]);
+    setResultLabel("Single Video");
 
     try {
       const res = await fetch("/api/fetch-videos", {
@@ -1008,6 +1017,7 @@ export default function Home() {
       setIsFetchingChannel(true);
       setChannelRows([]);
       setSelectedVideoUrls([]);
+      setResultLabel(fileName);
 
       try {
         const res = await fetch("/api/fetch-videos", {
@@ -1345,6 +1355,7 @@ export default function Home() {
         rows={channelRows}
         selectedVideoUrls={selectedVideoUrls}
         onSelectionChange={setSelectedVideoUrls}
+        label={resultLabel}
       />
 
       {/* ─── Transcript Results Table ─── */}
@@ -1371,6 +1382,7 @@ export default function Home() {
         setDownloadStatus(null);
         setDetailLogs([]);
         if (filename) setCurrentXlsFile(filename);
+        setResultLabel(filename ? filename.replace(/^SCRAPE_/, "").replace(/\.xlsx$/i, "") : "Saved Search");
       }} />
     </main>
   );

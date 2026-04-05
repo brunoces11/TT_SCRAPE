@@ -10,6 +10,7 @@ type VideoResultsTableProps = {
   rows: ChannelVideoRow[];
   selectedVideoUrls: string[];
   onSelectionChange: (selected: string[]) => void;
+  label?: string;
 };
 
 function formatDate(dateStr: string | undefined): string {
@@ -26,6 +27,7 @@ export default function VideoResultsTable({
   rows,
   selectedVideoUrls,
   onSelectionChange,
+  label,
 }: VideoResultsTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("views");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -106,7 +108,7 @@ export default function VideoResultsTable({
 
   return (
     <div className="table-container">
-      <h2>Results ({rows.length} videos)</h2>
+      <h2>{label ? `${label} — ` : ""}Results ({rows.length} videos)</h2>
       <div className="table-scroll">
         <table ref={tableRef} style={{ tableLayout: "fixed" }}>
           <thead>

@@ -33,7 +33,7 @@ function buildFilePrefix(views: number, publishDate: string): string {
     }
   }
   const v = views || 0;
-  const tier = v >= 10_000_000 ? "A1" : v >= 1_000_000 ? "A2" : "A3";
+  const tier = v >= 10_000_000 ? "1A" : v >= 1_000_000 ? "2A" : "3A";
   const viewsPart = String(v);
   return datePart ? `${tier}_${viewsPart}-${datePart}-` : `${tier}_${viewsPart}-`;
 }
