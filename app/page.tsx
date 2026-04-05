@@ -865,26 +865,11 @@ export default function Home() {
         </div>
         <div className="header-controls">
           <div className="header-control-item">
-            <span className="header-control-label">Config</span>
+            {/* <span className="header-control-label">Config</span> */}
             <button className="btn btn-prompt" onClick={handleOpenPrompt} title="Edit AI prompt">
-              Prompt
+              ⚙️
             </button>
           </div>
-          {transcriptActors.length > 0 && (
-            <div className="header-control-item">
-              <span className="header-control-label">Transcription Actor</span>
-              <select
-                className="actor-selector"
-                value={selectedTranscriptActor}
-                onChange={(e) => setSelectedTranscriptActor(e.target.value)}
-                title="Transcript actor"
-              >
-                {transcriptActors.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
           {apifyAccounts.length > 1 && (
             <div className="header-control-item">
               <span className="header-control-label">Transcription API</span>
@@ -916,8 +901,25 @@ export default function Home() {
         <div className="modal-overlay" onClick={() => setShowPromptModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <span>Edit AI Prompt</span>
+              <span>Settings</span>
               <button onClick={() => setShowPromptModal(false)} className="error-dismiss">✕</button>
+            </div>
+            {transcriptActors.length > 0 && (
+              <div className="modal-field">
+                <label className="modal-field-label">Transcription Actor</label>
+                <select
+                  className="actor-selector modal-actor-selector"
+                  value={selectedTranscriptActor}
+                  onChange={(e) => setSelectedTranscriptActor(e.target.value)}
+                >
+                  {transcriptActors.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="modal-field">
+              <label className="modal-field-label">AI Prompt</label>
             </div>
             <textarea
               className="prompt-textarea"
