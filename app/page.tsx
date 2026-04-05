@@ -440,7 +440,10 @@ export default function Home() {
             }
           }
         }
-      } catch { /* continue */ }
+      } catch (checkErr) {
+        const checkMsg = checkErr instanceof Error ? checkErr.message : "Unknown error";
+        setDetailLogs((prev) => [...prev, `⚠️ [CHECK] Failed to check existing transcripts: ${checkMsg}`]);
+      }
     }
 
     const faltantes = selectedVideoUrls.filter(
@@ -452,20 +455,30 @@ export default function Home() {
       setDownloadStatus(`Transcribing ${faltantes.length} missing video(s)...`);
       try {
         newTranscripts = await handleTranscribe(faltantes);
-      } catch { /* continue */ }
+      } catch (transcribeErr) {
+        const transcribeMsg = transcribeErr instanceof Error ? transcribeErr.message : "Unknown error";
+        setDetailLogs((prev) => [...prev, `⚠️ [TRANSCRIBE] Transcription failed: ${transcribeMsg}`]);
+      }
     }
 
     const allTranscriptions = new Map<string, string>();
     for (const [url, t] of memoryTranscripts) allTranscriptions.set(url, t);
     for (const [url, t] of diskTranscripts) allTranscriptions.set(url, t);
-    for (const row of newTranscripts) allTranscriptions.set(row.videoUrl, row.transcript);
+    for (const row of newTranscripts) {
+      allTranscriptions.set(row.videoUrl, row.transcript);
+      // Also index by videoId for fallback matching
+      if (row.videoId) {
+        allTranscriptions.set(row.videoId, row.transcript);
+      }
+    }
 
     // ── Step 2: Call LLM to enrich metadata ──
     setDownloadStatus(`Sending ${selectedVideoUrls.length} video(s) to AI...`);
 
     const videosForLLM = selectedVideoUrls.map((url) => {
       const row = channelRows.find((r) => r.videoUrl === url);
-      const transcription = allTranscriptions.get(url) || "ERRO: Transcription not available";
+      const videoId = url.match(/\/video\/(\d+)/)?.[1] || "";
+      const transcription = allTranscriptions.get(url) || allTranscriptions.get(videoId) || "ERRO: Transcription not available";
       return {
         videoId: row?.videoId || "",
         title: row?.title || "",
@@ -477,7 +490,8 @@ export default function Home() {
 
     const videosMetaFull = selectedVideoUrls.map((url) => {
       const row = channelRows.find((r) => r.videoUrl === url);
-      const transcription = allTranscriptions.get(url) || "ERRO: Transcription not available";
+      const videoId = url.match(/\/video\/(\d+)/)?.[1] || "";
+      const transcription = allTranscriptions.get(url) || allTranscriptions.get(videoId) || "ERRO: Transcription not available";
       return {
         videoId: row?.videoId || "",
         title: row?.title || "",
@@ -737,8 +751,9 @@ export default function Home() {
             }
           }
         }
-      } catch {
-        // If check fails, we'll just download the transcriptions
+      } catch (checkErr) {
+        const checkMsg = checkErr instanceof Error ? checkErr.message : "Unknown error";
+        setDetailLogs((prev) => [...prev, `⚠️ [CHECK] Failed to check existing transcripts: ${checkMsg}`]);
       }
     }
 
@@ -753,8 +768,9 @@ export default function Home() {
       setRunAIStatus(`Transcribing ${faltantes.length} missing video(s)...`);
       try {
         newTranscripts = await handleTranscribe(faltantes);
-      } catch {
-        // continue even if transcription fails
+      } catch (transcribeErr) {
+        const transcribeMsg = transcribeErr instanceof Error ? transcribeErr.message : "Unknown error";
+        setDetailLogs((prev) => [...prev, `⚠️ [TRANSCRIBE] Transcription failed: ${transcribeMsg}`]);
       }
     }
 
@@ -762,14 +778,20 @@ export default function Home() {
     const allTranscriptions = new Map<string, string>();
     for (const [url, t] of memoryTranscripts) allTranscriptions.set(url, t);
     for (const [url, t] of diskTranscripts) allTranscriptions.set(url, t);
-    for (const row of newTranscripts) allTranscriptions.set(row.videoUrl, row.transcript);
+    for (const row of newTranscripts) {
+      allTranscriptions.set(row.videoUrl, row.transcript);
+      if (row.videoId) {
+        allTranscriptions.set(row.videoId, row.transcript);
+      }
+    }
 
     // Step 6: Build payload
     setRunAIStatus(`Sending ${selectedVideoUrls.length} video(s) to AI...`);
 
     const videosForLLM = selectedVideoUrls.map((url) => {
       const row = channelRows.find((r) => r.videoUrl === url);
-      const transcription = allTranscriptions.get(url) || "ERRO: Transcription not available";
+      const videoId = url.match(/\/video\/(\d+)/)?.[1] || "";
+      const transcription = allTranscriptions.get(url) || allTranscriptions.get(videoId) || "ERRO: Transcription not available";
       return {
         videoId: row?.videoId || "",
         title: row?.title || "",
@@ -781,7 +803,8 @@ export default function Home() {
 
     const videosMetaFull = selectedVideoUrls.map((url) => {
       const row = channelRows.find((r) => r.videoUrl === url);
-      const transcription = allTranscriptions.get(url) || "ERRO: Transcription not available";
+      const videoId = url.match(/\/video\/(\d+)/)?.[1] || "";
+      const transcription = allTranscriptions.get(url) || allTranscriptions.get(videoId) || "ERRO: Transcription not available";
       return {
         videoId: row?.videoId || "",
         title: row?.title || "",
