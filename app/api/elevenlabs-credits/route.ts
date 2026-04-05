@@ -1,0 +1,26 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getTokenForElevenLabsAccount } from "@/lib/elevenlabs-accounts";
+
+export async function GET(request: NextRequest) {
+  try {
+    const accountId = request.nextUrl.searchParams.get("accountId") || undefined;
+    const token = getTokenForElevenLabsAccount(accountId);
+
+    const res = await fetch("https://api.elevenlabs.io/v1/user/subscription", {
+      headers: { "xi-api-key": token },
+    });
+    if (!res.ok) {
+      return NextResponse.json({ error: `ElevenLabs API error (${res.status})` }, { status: 500 });
+    }
+    const data = await res.json();
+
+    const characterCount = data.character_count;
+    const characterLimit = data.character_limit;
+    const characterRemaining = characterLimit - characterCount;
+
+    return NextResponse.json({ characterCount, characterLimit, characterRemaining });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}

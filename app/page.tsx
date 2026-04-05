@@ -37,6 +37,12 @@ export default function Home() {
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [promptText, setPromptText] = useState("");
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
+  const [elevenlabsAccounts, setElevenlabsAccounts] = useState<{ id: string; label: string; default: boolean }[]>([]);
+  const [selectedElevenLabsAccountId, setSelectedElevenLabsAccountId] = useState<string>("");
+  const selectedElevenLabsAccountIdRef = useRef<string>("");
+  const [elevenlabsVoices, setElevenlabsVoices] = useState<{ id: string; name: string; default: boolean }[]>([]);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>("");
+  const [elevenlabsCredits, setElevenlabsCredits] = useState<{ characterCount: number; characterLimit: number; characterRemaining: number } | null>(null);
 
   const fetchCredits = useCallback(async (accountId?: string) => {
     try {
@@ -50,6 +56,18 @@ export default function Home() {
       }
     } catch { /* silent */ }
     return null;
+  }, []);
+
+  const fetchElevenLabsCredits = useCallback(async (accountId?: string) => {
+    try {
+      const accId = accountId || selectedElevenLabsAccountIdRef.current;
+      const url = accId ? `/api/elevenlabs-credits?accountId=${accId}` : "/api/elevenlabs-credits";
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        setElevenlabsCredits(data);
+      }
+    } catch { /* silent */ }
   }, []);
 
   useEffect(() => {
@@ -79,13 +97,45 @@ export default function Home() {
         else if (actors.length > 0) setSelectedTranscriptActor(actors[0].id);
       })
       .catch(() => {});
-  }, [fetchCredits]);
+    // Load ElevenLabs accounts
+    fetch("/api/elevenlabs-accounts")
+      .then((r) => r.json())
+      .then((data) => {
+        const accounts = data.accounts || [];
+        setElevenlabsAccounts(accounts);
+        const defaultAcc = accounts.find((a: { default: boolean }) => a.default);
+        const accId = defaultAcc?.id || accounts[0]?.id || "";
+        if (accId) {
+          setSelectedElevenLabsAccountId(accId);
+          selectedElevenLabsAccountIdRef.current = accId;
+          fetchElevenLabsCredits(accId);
+        }
+      })
+      .catch(() => {});
+    // Load ElevenLabs voices
+    fetch("/api/elevenlabs-voices")
+      .then((r) => r.json())
+      .then((data) => {
+        const voices = data.voices || [];
+        setElevenlabsVoices(voices);
+        const defaultVoice = voices.find((v: { default: boolean }) => v.default);
+        if (defaultVoice) setSelectedVoiceId(defaultVoice.id);
+        else if (voices.length > 0) setSelectedVoiceId(voices[0].id);
+      })
+      .catch(() => {});
+  }, [fetchCredits, fetchElevenLabsCredits]);
 
   // ─── Account switch handler ───
   const handleAccountChange = (newAccountId: string) => {
     setSelectedAccountId(newAccountId);
     selectedAccountIdRef.current = newAccountId;
     fetchCredits(newAccountId);
+  };
+
+  const handleElevenLabsAccountChange = (newAccountId: string) => {
+    setSelectedElevenLabsAccountId(newAccountId);
+    selectedElevenLabsAccountIdRef.current = newAccountId;
+    fetchElevenLabsCredits(newAccountId);
   };
 
   // ─── Prompt Modal helpers ───
@@ -431,22 +481,82 @@ export default function Home() {
       };
     });
 
+    let enrichData: { debugLogs?: string[]; error?: string; llmVideos?: { videoId: string; title: string; transcription: string }[] } | null = null;
+
     try {
       const enrichRes = await fetch("/api/enrich-metadata", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ videos: videosForLLM, videosMeta: videosMetaFull }),
       });
-      const enrichData = await enrichRes.json();
-      if (enrichData.debugLogs) {
-        setDetailLogs((prev) => [...prev, ...(enrichData.debugLogs as string[])]);
+      enrichData = await enrichRes.json();
+      if (enrichData?.debugLogs) {
+        setDetailLogs((prev) => [...prev, ...(enrichData!.debugLogs as string[])]);
       }
       if (!enrichRes.ok) {
-        setDetailLogs((prev) => [...prev, `❌ [AI] ${enrichData.error || "LLM enrichment failed"}`]);
+        setError(enrichData?.error || "LLM enrichment failed");
+        setDownloadStatus(null);
+        setIsDownloadingAll(false);
+        return;
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      setDetailLogs((prev) => [...prev, `❌ [AI] Network error: ${msg}`]);
+      setError(`AI enrichment failed: ${msg}`);
+      setDownloadStatus(null);
+      setIsDownloadingAll(false);
+      return;
+    }
+
+    // ── Step 2.5: Generate TTS for each video ──
+    const llmVideos = enrichData?.llmVideos || [];
+    let ttsOk = 0;
+    let ttsSkipped = 0;
+    let ttsFailed = 0;
+
+    if (llmVideos.length > 0) {
+      for (let i = 0; i < llmVideos.length; i++) {
+        const item = llmVideos[i];
+
+        if (item.transcription.startsWith("ERRO:")) {
+          ttsSkipped++;
+          setDetailLogs((prev) => [...prev, `⏭️ [TTS] Skipped "${item.title.substring(0, 50)}" — no valid transcription`]);
+          continue;
+        }
+
+        setDownloadStatus(`Generating TTS ${i + 1} of ${llmVideos.length}...`);
+
+        try {
+          const ttsRes = await fetch("/api/generate-tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: item.transcription,
+              title: item.title,
+              accountId: selectedElevenLabsAccountId,
+              voiceId: selectedVoiceId,
+            }),
+          });
+
+          const ttsData = await ttsRes.json();
+
+          if (!ttsRes.ok) {
+            ttsFailed++;
+            setDetailLogs((prev) => [...prev, `❌ [TTS] ${item.title.substring(0, 50)}: ${ttsData.error || "Unknown error"}`]);
+          } else {
+            ttsOk++;
+            setDetailLogs((prev) => [...prev, `🔊 [TTS] ${ttsData.filename}`]);
+          }
+        } catch (ttsErr) {
+          ttsFailed++;
+          const ttsMsg = ttsErr instanceof Error ? ttsErr.message : "Unknown error";
+          setDetailLogs((prev) => [...prev, `❌ [TTS] ${item.title.substring(0, 50)}: ${ttsMsg}`]);
+        }
+      }
+
+      // Refresh ElevenLabs credits after TTS
+      fetchElevenLabsCredits();
+
+      if (ttsOk > 0) setDetailLogs((prev) => [...prev, `🔊 [TTS] ${ttsOk} audio(s) generated, ${ttsSkipped} skipped, ${ttsFailed} error(s)`]);
     }
 
     // ── Step 3: Download each video individually ──
@@ -692,7 +802,64 @@ export default function Home() {
 
       const saved = data.savedFiles?.length || 0;
       const errorCount = data.errors?.length || 0;
-      setRunAIStatus(`AI enrichment completed: ${saved} file(s) saved, ${errorCount} error(s). Folder: downloads/`);
+
+      // ── TTS Generation Step ──
+      const llmVideos = data.llmVideos || [];
+      let ttsOk = 0;
+      let ttsSkipped = 0;
+      let ttsFailed = 0;
+
+      if (llmVideos.length > 0) {
+        for (let i = 0; i < llmVideos.length; i++) {
+          const item = llmVideos[i] as { videoId: string; title: string; transcription: string };
+
+          if (item.transcription.startsWith("ERRO:")) {
+            ttsSkipped++;
+            setDetailLogs((prev) => [...prev, `⏭️ [TTS] Skipped "${item.title.substring(0, 50)}" — no valid transcription`]);
+            continue;
+          }
+
+          setRunAIStatus(`Generating TTS ${i + 1} of ${llmVideos.length}...`);
+
+          try {
+            const ttsRes = await fetch("/api/generate-tts", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                text: item.transcription,
+                title: item.title,
+                accountId: selectedElevenLabsAccountId,
+                voiceId: selectedVoiceId,
+              }),
+            });
+
+            const ttsData = await ttsRes.json();
+
+            if (!ttsRes.ok) {
+              ttsFailed++;
+              setDetailLogs((prev) => [...prev, `❌ [TTS] ${item.title.substring(0, 50)}: ${ttsData.error || "Unknown error"}`]);
+            } else {
+              ttsOk++;
+              setDetailLogs((prev) => [...prev, `🔊 [TTS] ${ttsData.filename}`]);
+            }
+          } catch (ttsErr) {
+            ttsFailed++;
+            const ttsMsg = ttsErr instanceof Error ? ttsErr.message : "Unknown error";
+            setDetailLogs((prev) => [...prev, `❌ [TTS] ${item.title.substring(0, 50)}: ${ttsMsg}`]);
+          }
+        }
+      }
+
+      // Refresh ElevenLabs credits after TTS
+      fetchElevenLabsCredits();
+
+      const ttsParts: string[] = [];
+      if (ttsOk > 0) ttsParts.push(`${ttsOk} audio(s) generated`);
+      if (ttsSkipped > 0) ttsParts.push(`${ttsSkipped} skipped`);
+      if (ttsFailed > 0) ttsParts.push(`${ttsFailed} TTS error(s)`);
+      const ttsInfo = ttsParts.length > 0 ? ` · TTS: ${ttsParts.join(", ")}` : "";
+
+      setRunAIStatus(`AI enrichment completed: ${saved} file(s) saved, ${errorCount} error(s)${ttsInfo}. Folder: downloads/`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       setError(`Network error: ${msg}`);
@@ -870,6 +1037,48 @@ export default function Home() {
               ⚙️
             </button>
           </div>
+          {/* 2. Voice ID dropdown */}
+          {elevenlabsVoices.length >= 1 && (
+            <div className="header-control-item">
+              <span className="header-control-label">Voice ID</span>
+              <select
+                className="actor-selector"
+                value={selectedVoiceId}
+                onChange={(e) => setSelectedVoiceId(e.target.value)}
+                title="ElevenLabs Voice"
+              >
+                {elevenlabsVoices.map((v) => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {/* 3. TTS API dropdown */}
+          {elevenlabsAccounts.length >= 1 && (
+            <div className="header-control-item">
+              <span className="header-control-label">TTS API</span>
+              <select
+                className="actor-selector"
+                value={selectedElevenLabsAccountId}
+                onChange={(e) => handleElevenLabsAccountChange(e.target.value)}
+                title="ElevenLabs API account"
+              >
+                {elevenlabsAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>{a.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {/* 4. ElevenLabs credits badge */}
+          {elevenlabsCredits && (
+            <div className="header-control-item">
+              <span className="header-control-label">TTS Credits</span>
+              <div className="credits-badge" title={`Used: ${elevenlabsCredits.characterCount.toLocaleString()} / Limit: ${elevenlabsCredits.characterLimit.toLocaleString()}`}>
+                🔊 {elevenlabsCredits.characterRemaining.toLocaleString()} chars
+              </div>
+            </div>
+          )}
+          {/* 5. Transcription API dropdown */}
           {apifyAccounts.length > 1 && (
             <div className="header-control-item">
               <span className="header-control-label">Transcription API</span>
@@ -885,6 +1094,7 @@ export default function Home() {
               </select>
             </div>
           )}
+          {/* 6. Apify credits badge */}
           {apifyCredits && (
             <div className="header-control-item">
               <span className="header-control-label">Credits</span>

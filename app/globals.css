@@ -702,8 +702,8 @@ tbody tr:last-child td {
 }
 
 .header-control-label {
-  font-size: 0.62rem;
-  color: #555;
+  font-size: 0.72rem;
+  color: #6b6b6b;
   text-transform: lowercase;
   letter-spacing: 0.3px;
 }

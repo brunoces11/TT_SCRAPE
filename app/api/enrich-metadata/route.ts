@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
     }
 
     debugLogs.push(`[RESULT] saved=${savedFiles.length}, errors=${errors.length}`);
-    return NextResponse.json({ savedFiles, errors, debugLogs, downloadDir: DOWNLOAD_DIR });
+    return NextResponse.json({ savedFiles, errors, debugLogs, downloadDir: DOWNLOAD_DIR, llmVideos: llmResult.videos });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg, debugLogs }, { status: 500 });

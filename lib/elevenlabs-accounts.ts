@@ -1,0 +1,45 @@
+export interface ElevenLabsAccount {
+  id: string;
+  label: string;
+  token: string;
+  default: boolean;
+}
+
+export interface ElevenLabsVoice {
+  id: string;
+  name: string;
+  default: boolean;
+}
+
+export function getElevenLabsAccounts(): ElevenLabsAccount[] {
+  const raw = process.env.ELEVENLABS_ACCOUNTS;
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as ElevenLabsAccount[];
+  } catch {
+    return [];
+  }
+}
+
+export function getTokenForElevenLabsAccount(accountId?: string): string {
+  const accounts = getElevenLabsAccounts();
+  if (accountId) {
+    const found = accounts.find((a) => a.id === accountId);
+    if (found) return found.token;
+  }
+  // Return default account token
+  const defaultAcc = accounts.find((a) => a.default);
+  if (defaultAcc) return defaultAcc.token;
+  // Fallback
+  return accounts[0]?.token || "";
+}
+
+export function getElevenLabsVoices(): ElevenLabsVoice[] {
+  const raw = process.env.ELEVENLABS_VOICES;
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as ElevenLabsVoice[];
+  } catch {
+    return [];
+  }
+}
