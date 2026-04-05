@@ -351,14 +351,105 @@ export default function Home() {
     setError(null);
     setDetailLogs([]);
 
-    // Step 1: Transcripts (errors won't block step 2)
-    try {
-      await handleTranscribe();
-    } catch {
-      // continue even if transcription fails
+    // ── Step 1: Smart transcription (same logic as Run AI) ──
+    setDownloadStatus("Checking existing transcriptions...");
+
+    const memoryTranscripts = new Map(
+      transcriptRows.map((r) => [r.videoUrl, r.transcript])
+    );
+
+    const notInMemory = selectedVideoUrls.filter((url) => !memoryTranscripts.has(url));
+    const diskTranscripts = new Map<string, string>();
+
+    if (notInMemory.length > 0) {
+      try {
+        const checkPayload = notInMemory.map((url) => {
+          const row = channelRows.find((r) => r.videoUrl === url);
+          return { title: row?.title || "", videoUrl: url };
+        });
+        const checkRes = await fetch("/api/check-transcripts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ videos: checkPayload }),
+        });
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          for (const item of checkData.results || []) {
+            if (item.found && item.transcription) {
+              diskTranscripts.set(item.videoUrl, item.transcription);
+            }
+          }
+        }
+      } catch { /* continue */ }
     }
 
-    // Step 2: Download each video individually (avoids timeout for large batches)
+    const faltantes = selectedVideoUrls.filter(
+      (url) => !memoryTranscripts.has(url) && !diskTranscripts.has(url)
+    );
+
+    let newTranscripts: TranscriptRow[] = [];
+    if (faltantes.length > 0) {
+      setDownloadStatus(`Transcribing ${faltantes.length} missing video(s)...`);
+      try {
+        newTranscripts = await handleTranscribe(faltantes);
+      } catch { /* continue */ }
+    }
+
+    const allTranscriptions = new Map<string, string>();
+    for (const [url, t] of memoryTranscripts) allTranscriptions.set(url, t);
+    for (const [url, t] of diskTranscripts) allTranscriptions.set(url, t);
+    for (const row of newTranscripts) allTranscriptions.set(row.videoUrl, row.transcript);
+
+    // ── Step 2: Call LLM to enrich metadata ──
+    setDownloadStatus(`Sending ${selectedVideoUrls.length} video(s) to AI...`);
+
+    const videosForLLM = selectedVideoUrls.map((url) => {
+      const row = channelRows.find((r) => r.videoUrl === url);
+      const transcription = allTranscriptions.get(url) || "ERRO: Transcription not available";
+      return {
+        videoId: row?.videoId || "",
+        title: row?.title || "",
+        description: row?.description || "",
+        hashtags: row?.hashtags?.join(", ") || "",
+        transcription,
+      };
+    });
+
+    const videosMetaFull = selectedVideoUrls.map((url) => {
+      const row = channelRows.find((r) => r.videoUrl === url);
+      const transcription = allTranscriptions.get(url) || "ERRO: Transcription not available";
+      return {
+        videoId: row?.videoId || "",
+        title: row?.title || "",
+        views: row?.views || 0,
+        likes: row?.likes || 0,
+        description: row?.description || "",
+        hashtags: row?.hashtags?.join(", ") || "",
+        videoUrl: url,
+        publishDate: row?.publishDate || "",
+        transcription,
+      };
+    });
+
+    try {
+      const enrichRes = await fetch("/api/enrich-metadata", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videos: videosForLLM, videosMeta: videosMetaFull }),
+      });
+      const enrichData = await enrichRes.json();
+      if (enrichData.debugLogs) {
+        setDetailLogs((prev) => [...prev, ...(enrichData.debugLogs as string[])]);
+      }
+      if (!enrichRes.ok) {
+        setDetailLogs((prev) => [...prev, `❌ [AI] ${enrichData.error || "LLM enrichment failed"}`]);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      setDetailLogs((prev) => [...prev, `❌ [AI] Network error: ${msg}`]);
+    }
+
+    // ── Step 3: Download each video individually ──
     let totalOk = 0;
     let totalFailed = 0;
     const meta = getSelectedMeta();
@@ -796,7 +887,7 @@ export default function Home() {
           )}
           {apifyAccounts.length > 1 && (
             <div className="header-control-item">
-              <span className="header-control-label">API Account</span>
+              <span className="header-control-label">Transcription API</span>
               <select
                 className="actor-selector"
                 value={selectedAccountId}
@@ -930,6 +1021,7 @@ export default function Home() {
               {isDownloadingAll ? "Downloading all..." : "📦 Download all"}
             </button>
 
+            {/* Download x5 button — disabled, logic preserved
             <button
               className="btn btn-download-x5"
               onClick={handleDownloadX5}
@@ -937,6 +1029,7 @@ export default function Home() {
             >
               {isDownloadingX5 ? "Downloading x5..." : "🔥 Download all x5"}
             </button>
+            */}
 
             <button
               className="btn btn-delete"
