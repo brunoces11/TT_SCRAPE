@@ -1,6 +1,5 @@
-// TTS Accounts & Voices library (currently Google Cloud TTS)
+// BACKUP — Google Cloud TTS Accounts Library (original lib/elevenlabs-accounts.ts)
 // Reads GOOGLE_TTS_ACCOUNTS and GOOGLE_TTS_VOICES env vars
-// Backup of ElevenLabs version: lib/elevenlabs-accounts.ts.bak
 
 export interface ElevenLabsAccount {
   id: string;

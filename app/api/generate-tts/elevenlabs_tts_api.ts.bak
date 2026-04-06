@@ -1,3 +1,4 @@
+// BACKUP — ElevenLabs TTS API (original generate-tts/route.ts)
 import { NextRequest, NextResponse } from "next/server";
 import { getTokenForElevenLabsAccount } from "@/lib/elevenlabs-accounts";
 import path from "path";
@@ -46,41 +47,30 @@ export async function POST(request: NextRequest) {
       publishDate?: string;
     };
 
-    const apiKey = getTokenForElevenLabsAccount(accountId);
+    const token = getTokenForElevenLabsAccount(accountId);
 
-    // Google Cloud TTS API
     const res = await fetch(
-      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "xi-api-key": token,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          input: { text },
-          voice: {
-            languageCode: voiceId.split("-").slice(0, 2).join("-") || "pt-BR",
-            name: voiceId,
-          },
-          audioConfig: {
-            audioEncoding: "MP3",
-            speakingRate: 1.0,
-            pitch: 0,
-          },
+          text,
+          model_id: "eleven_multilingual_v2",
         }),
       }
     );
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`Google TTS API error (${res.status}): ${errText}`);
+      throw new Error(`ElevenLabs API error (${res.status}): ${errText}`);
     }
 
-    const data = await res.json();
-    const audioContent = data.audioContent;
-    if (!audioContent) {
-      throw new Error("Google TTS returned empty audioContent");
-    }
-
-    const buffer = Buffer.from(audioContent, "base64");
+    const arrayBuffer = await res.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
     if (!fs.existsSync(DOWNLOAD_DIR)) {
       fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });

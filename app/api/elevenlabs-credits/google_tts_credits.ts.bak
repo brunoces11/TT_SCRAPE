@@ -1,16 +1,11 @@
+// BACKUP — Google Cloud TTS Credits (original elevenlabs-credits/route.ts)
 import { NextRequest, NextResponse } from "next/server";
 
-// Google Cloud TTS free tier: 1M WaveNet chars/month, 4M standard chars/month
-// Google doesn't have a simple REST endpoint to check usage like ElevenLabs does.
-// We return static free tier limits as reference.
 export async function GET(request: NextRequest) {
   try {
-    // Google Cloud TTS doesn't expose a usage API via simple API key.
-    // Return the free tier limits as reference info.
     const characterCount = 0;
-    const characterLimit = 1_000_000; // WaveNet free tier
+    const characterLimit = 1_000_000;
     const characterRemaining = characterLimit - characterCount;
-
     return NextResponse.json({ characterCount, characterLimit, characterRemaining });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";

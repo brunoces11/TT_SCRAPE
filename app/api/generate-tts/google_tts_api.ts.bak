@@ -1,3 +1,4 @@
+// BACKUP — Google Cloud TTS API (original generate-tts/route.ts)
 import { NextRequest, NextResponse } from "next/server";
 import { getTokenForElevenLabsAccount } from "@/lib/elevenlabs-accounts";
 import path from "path";

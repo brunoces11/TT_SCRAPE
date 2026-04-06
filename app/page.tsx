@@ -556,7 +556,7 @@ export default function Home() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               text: item.transcription,
-              title: item.title,
+              title: rowMeta?.title || item.title,
               accountId: selectedElevenLabsAccountId,
               voiceId: selectedVoiceId,
               views: rowMeta?.views || 0,
@@ -568,7 +568,7 @@ export default function Home() {
 
           if (!ttsRes.ok) {
             ttsFailed++;
-            setDetailLogs((prev) => [...prev, `❌ [TTS] ${item.title.substring(0, 50)}: ${ttsData.error || "Unknown error"}`]);
+            setDetailLogs((prev) => [...prev, `❌ [TTS] ${(rowMeta?.title || item.title).substring(0, 50)}: ${ttsData.error || "Unknown error"}`]);
           } else {
             ttsOk++;
             setDetailLogs((prev) => [...prev, `🔊 [TTS] ${ttsData.filename}`]);
@@ -576,7 +576,7 @@ export default function Home() {
         } catch (ttsErr) {
           ttsFailed++;
           const ttsMsg = ttsErr instanceof Error ? ttsErr.message : "Unknown error";
-          setDetailLogs((prev) => [...prev, `❌ [TTS] ${item.title.substring(0, 50)}: ${ttsMsg}`]);
+          setDetailLogs((prev) => [...prev, `❌ [TTS] ${(rowMeta?.title || item.title).substring(0, 50)}: ${ttsMsg}`]);
         }
       }
 
@@ -868,7 +868,7 @@ export default function Home() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 text: item.transcription,
-                title: item.title,
+                title: rowMeta?.title || item.title,
                 accountId: selectedElevenLabsAccountId,
                 voiceId: selectedVoiceId,
                 views: rowMeta?.views || 0,
@@ -880,7 +880,7 @@ export default function Home() {
 
             if (!ttsRes.ok) {
               ttsFailed++;
-              setDetailLogs((prev) => [...prev, `❌ [TTS] ${item.title.substring(0, 50)}: ${ttsData.error || "Unknown error"}`]);
+              setDetailLogs((prev) => [...prev, `❌ [TTS] ${(rowMeta?.title || item.title).substring(0, 50)}: ${ttsData.error || "Unknown error"}`]);
             } else {
               ttsOk++;
               setDetailLogs((prev) => [...prev, `🔊 [TTS] ${ttsData.filename}`]);
@@ -888,7 +888,7 @@ export default function Home() {
           } catch (ttsErr) {
             ttsFailed++;
             const ttsMsg = ttsErr instanceof Error ? ttsErr.message : "Unknown error";
-            setDetailLogs((prev) => [...prev, `❌ [TTS] ${item.title.substring(0, 50)}: ${ttsMsg}`]);
+            setDetailLogs((prev) => [...prev, `❌ [TTS] ${(rowMeta?.title || item.title).substring(0, 50)}: ${ttsMsg}`]);
           }
         }
       }
