@@ -48,39 +48,33 @@ export async function POST(request: NextRequest) {
 
     const apiKey = getTokenForElevenLabsAccount(accountId);
 
-    // Google Cloud TTS API
-    const res = await fetch(
-      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          input: { text },
-          voice: {
-            languageCode: voiceId.split("-").slice(0, 2).join("-") || "pt-BR",
-            name: voiceId,
-          },
-          audioConfig: {
-            audioEncoding: "MP3",
-            speakingRate: 1.0,
-            pitch: 0,
-          },
-        }),
-      }
-    );
+    // Mistral Voxtral TTS API
+    const res = await fetch("https://api.mistral.ai/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "mistral-tts-latest",
+        input: text,
+        voice: voiceId || "jessica",
+        response_format: "mp3",
+      }),
+    });
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`Google TTS API error (${res.status}): ${errText}`);
+      throw new Error(`Mistral TTS API error (${res.status}): ${errText}`);
     }
 
     const data = await res.json();
-    const audioContent = data.audioContent;
-    if (!audioContent) {
-      throw new Error("Google TTS returned empty audioContent");
+    const audioData = data.audio_data;
+    if (!audioData) {
+      throw new Error("Mistral TTS returned empty audio_data");
     }
 
-    const buffer = Buffer.from(audioContent, "base64");
+    const buffer = Buffer.from(audioData, "base64");
 
     if (!fs.existsSync(DOWNLOAD_DIR)) {
       fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });

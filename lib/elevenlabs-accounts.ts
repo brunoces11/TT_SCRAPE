@@ -1,6 +1,6 @@
-// TTS Accounts & Voices library (currently Google Cloud TTS)
-// Reads GOOGLE_TTS_ACCOUNTS and GOOGLE_TTS_VOICES env vars
-// Backup of ElevenLabs version: lib/elevenlabs-accounts.ts.bak
+// TTS Accounts & Voices library (currently Mistral Voxtral TTS)
+// Reads MISTRAL_TTS_ACCOUNTS and MISTRAL_TTS_VOICES env vars
+// Backups: lib/elevenlabs-accounts.ts.bak (ElevenLabs), lib/google_tts_accounts.ts.bak (Google)
 
 export interface ElevenLabsAccount {
   id: string;
@@ -16,7 +16,7 @@ export interface ElevenLabsVoice {
 }
 
 export function getElevenLabsAccounts(): ElevenLabsAccount[] {
-  const raw = process.env.GOOGLE_TTS_ACCOUNTS;
+  const raw = process.env.MISTRAL_TTS_ACCOUNTS;
   if (!raw) return [];
   try {
     return JSON.parse(raw) as ElevenLabsAccount[];
@@ -37,7 +37,7 @@ export function getTokenForElevenLabsAccount(accountId?: string): string {
 }
 
 export function getElevenLabsVoices(): ElevenLabsVoice[] {
-  const raw = process.env.GOOGLE_TTS_VOICES;
+  const raw = process.env.MISTRAL_TTS_VOICES;
   if (!raw) return [];
   try {
     return JSON.parse(raw) as ElevenLabsVoice[];
