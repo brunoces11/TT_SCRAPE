@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import fs from "fs";
 
-export const maxDuration = 120;
+export const maxDuration = 600;
 
 const DOWNLOAD_DIR = path.join(process.cwd(), "downloads");
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
@@ -145,6 +145,8 @@ async function callOpenAI(videos: VideoForLLM[]): Promise<LLMResponse> {
   return JSON.parse(content) as LLMResponse;
 }
 
+const BATCH_SIZE = 10;
+
 export async function POST(request: NextRequest) {
   const debugLogs: string[] = [];
 
@@ -160,28 +162,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No videos provided." }, { status: 400 });
     }
 
-    debugLogs.push(`[INPUT] ${videos.length} video(s) to enrich`);
-
-    // Call OpenAI (with 1 retry on parse failure)
-    let llmResult: LLMResponse;
-    try {
-      llmResult = await callOpenAI(videos);
-    } catch (firstErr) {
-      debugLogs.push(`[LLM] First attempt failed: ${firstErr instanceof Error ? firstErr.message : "unknown"}, retrying...`);
-      try {
-        llmResult = await callOpenAI(videos);
-      } catch (retryErr) {
-        const msg = retryErr instanceof Error ? retryErr.message : "unknown";
-        debugLogs.push(`[LLM] Retry failed: ${msg}`);
-        return NextResponse.json({ error: `OpenAI failed after retry: ${msg}`, debugLogs }, { status: 502 });
-      }
-    }
-
-    if (!Array.isArray(llmResult.videos)) {
-      return NextResponse.json({ error: "LLM returned invalid format (missing videos array)", debugLogs }, { status: 502 });
-    }
-
-    debugLogs.push(`[LLM] Returned ${llmResult.videos.length} enriched item(s)`);
+    debugLogs.push(`[INPUT] ${videos.length} video(s) to enrich (batch size: ${BATCH_SIZE})`);
 
     // Build lookup maps
     const metaMap = new Map<string, VideoMeta>();
@@ -193,38 +174,76 @@ export async function POST(request: NextRequest) {
       fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
     }
 
+    const allLlmVideos: VideoForLLM[] = [];
     const savedFiles: string[] = [];
     const errors: string[] = [];
 
-    for (const llmItem of llmResult.videos) {
+    // Process in batches to avoid OpenAI timeout on large payloads
+    const totalBatches = Math.ceil(videos.length / BATCH_SIZE);
+
+    for (let b = 0; b < totalBatches; b++) {
+      const batchStart = b * BATCH_SIZE;
+      const batch = videos.slice(batchStart, batchStart + BATCH_SIZE);
+      debugLogs.push(`[BATCH ${b + 1}/${totalBatches}] Processing ${batch.length} video(s)...`);
+
+      // Call OpenAI with retry for this batch
+      let batchResult: LLMResponse | null = null;
       try {
-        const meta = metaMap.get(llmItem.videoId);
-        if (!meta) {
-          debugLogs.push(`[SKIP] videoId ${llmItem.videoId} not found in videosMeta`);
+        batchResult = await callOpenAI(batch);
+      } catch (firstErr) {
+        debugLogs.push(`[BATCH ${b + 1}] First attempt failed: ${firstErr instanceof Error ? firstErr.message : "unknown"}, retrying...`);
+        try {
+          batchResult = await callOpenAI(batch);
+        } catch (retryErr) {
+          const msg = retryErr instanceof Error ? retryErr.message : "unknown";
+          debugLogs.push(`[BATCH ${b + 1}] Retry failed: ${msg}`);
+          errors.push(`Batch ${b + 1} failed: ${msg}`);
+          // Continue to next batch instead of aborting
           continue;
         }
-
-        const safeName = sanitizeFilename(meta.title);
-        if (!safeName) {
-          debugLogs.push(`[SKIP] empty filename for videoId ${llmItem.videoId}`);
-          continue;
-        }
-
-        const prefix = buildFilePrefix(meta.views, meta.publishDate);
-        const txtContent = buildEnrichedTxtContent(llmItem, meta);
-        const txtPath = path.join(DOWNLOAD_DIR, `${prefix}${safeName}.txt`);
-        fs.writeFileSync(txtPath, txtContent, "utf-8");
-        savedFiles.push(`${prefix}${safeName}.txt`);
-        debugLogs.push(`[SAVED] ${prefix}${safeName}.txt (${txtContent.length} chars)`);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "unknown";
-        errors.push(msg);
-        debugLogs.push(`[ERROR] ${msg}`);
       }
+
+      if (!batchResult || !Array.isArray(batchResult.videos)) {
+        debugLogs.push(`[BATCH ${b + 1}] Invalid LLM response — skipping`);
+        errors.push(`Batch ${b + 1}: invalid LLM response`);
+        continue;
+      }
+
+      debugLogs.push(`[BATCH ${b + 1}] LLM returned ${batchResult.videos.length} enriched item(s)`);
+
+      // Save enriched files for this batch
+      for (const llmItem of batchResult.videos) {
+        try {
+          const meta = metaMap.get(llmItem.videoId);
+          if (!meta) {
+            debugLogs.push(`[SKIP] videoId ${llmItem.videoId} not found in videosMeta`);
+            continue;
+          }
+
+          const safeName = sanitizeFilename(meta.title);
+          if (!safeName) {
+            debugLogs.push(`[SKIP] empty filename for videoId ${llmItem.videoId}`);
+            continue;
+          }
+
+          const prefix = buildFilePrefix(meta.views, meta.publishDate);
+          const txtContent = buildEnrichedTxtContent(llmItem, meta);
+          const txtPath = path.join(DOWNLOAD_DIR, `${prefix}${safeName}.txt`);
+          fs.writeFileSync(txtPath, txtContent, "utf-8");
+          savedFiles.push(`${prefix}${safeName}.txt`);
+          debugLogs.push(`[SAVED] ${prefix}${safeName}.txt (${txtContent.length} chars)`);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "unknown";
+          errors.push(msg);
+          debugLogs.push(`[ERROR] ${msg}`);
+        }
+      }
+
+      allLlmVideos.push(...batchResult.videos);
     }
 
-    debugLogs.push(`[RESULT] saved=${savedFiles.length}, errors=${errors.length}`);
-    return NextResponse.json({ savedFiles, errors, debugLogs, downloadDir: DOWNLOAD_DIR, llmVideos: llmResult.videos });
+    debugLogs.push(`[RESULT] saved=${savedFiles.length}, errors=${errors.length}, totalBatches=${totalBatches}`);
+    return NextResponse.json({ savedFiles, errors, debugLogs, downloadDir: DOWNLOAD_DIR, llmVideos: allLlmVideos });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg, debugLogs }, { status: 500 });
