@@ -411,6 +411,42 @@ export default function Home() {
     setError(null);
     setDetailLogs([]);
 
+    // ── Step 0: Check which files already exist on disk ──
+    setDownloadStatus("Checking existing files...");
+
+    const existingFiles = new Map<string, { hasTxt: boolean; hasMp3: boolean; hasMp4: boolean }>();
+    try {
+      const checkPayload = selectedVideoUrls.map((url) => {
+        const row = channelRows.find((r) => r.videoUrl === url);
+        return { title: row?.title || "", videoUrl: url, views: row?.views || 0, publishDate: row?.publishDate || "" };
+      });
+      const cfRes = await fetch("/api/check-files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videos: checkPayload }),
+      });
+      if (cfRes.ok) {
+        const cfData = await cfRes.json();
+        for (const item of cfData.results || []) {
+          existingFiles.set(item.videoUrl, { hasTxt: item.hasTxt, hasMp3: item.hasMp3, hasMp4: item.hasMp4 });
+        }
+      }
+    } catch (cfErr) {
+      const cfMsg = cfErr instanceof Error ? cfErr.message : "Unknown error";
+      setDetailLogs((prev) => [...prev, `⚠️ [CHECK-FILES] Failed to check existing files: ${cfMsg}`]);
+    }
+
+    const skipTxtCount = selectedVideoUrls.filter((url) => existingFiles.get(url)?.hasTxt).length;
+    const skipMp3Count = selectedVideoUrls.filter((url) => existingFiles.get(url)?.hasMp3).length;
+    const skipMp4Count = selectedVideoUrls.filter((url) => existingFiles.get(url)?.hasMp4).length;
+    if (skipTxtCount > 0 || skipMp3Count > 0 || skipMp4Count > 0) {
+      const parts: string[] = [];
+      if (skipTxtCount > 0) parts.push(`${skipTxtCount} .txt`);
+      if (skipMp3Count > 0) parts.push(`${skipMp3Count} .mp3`);
+      if (skipMp4Count > 0) parts.push(`${skipMp4Count} .mp4`);
+      setDetailLogs((prev) => [...prev, `⏭️ [SKIP] Already exist: ${parts.join(", ")}`]);
+    }
+
     // ── Step 1: Smart transcription (same logic as Run AI) ──
     setDownloadStatus("Checking existing transcriptions...");
 
@@ -472,66 +508,67 @@ export default function Home() {
       }
     }
 
-    // ── Step 2: Call LLM to enrich metadata ──
-    setDownloadStatus(`Sending ${selectedVideoUrls.length} video(s) to AI...`);
-
-    const videosForLLM = selectedVideoUrls.map((url) => {
-      const row = channelRows.find((r) => r.videoUrl === url);
-      const videoId = url.match(/\/video\/(\d+)/)?.[1] || "";
-      const transcription = allTranscriptions.get(url) || allTranscriptions.get(videoId) || "ERRO: Transcription not available";
-      return {
-        videoId: row?.videoId || "",
-        title: row?.title || "",
-        description: row?.description || "",
-        hashtags: row?.hashtags?.join(", ") || "",
-        transcription,
-      };
-    });
-
-    const videosMetaFull = selectedVideoUrls.map((url) => {
-      const row = channelRows.find((r) => r.videoUrl === url);
-      const videoId = url.match(/\/video\/(\d+)/)?.[1] || "";
-      const transcription = allTranscriptions.get(url) || allTranscriptions.get(videoId) || "ERRO: Transcription not available";
-      return {
-        videoId: row?.videoId || "",
-        title: row?.title || "",
-        views: row?.views || 0,
-        likes: row?.likes || 0,
-        description: row?.description || "",
-        hashtags: row?.hashtags?.join(", ") || "",
-        videoUrl: url,
-        publishDate: row?.publishDate || "",
-        transcription,
-      };
-    });
+    // ── Step 2: Call LLM to enrich metadata (skip videos that already have .txt) ──
+    const urlsNeedEnrich = selectedVideoUrls.filter((url) => !existingFiles.get(url)?.hasTxt);
 
     let enrichData: { debugLogs?: string[]; error?: string; llmVideos?: { videoId: string; title: string; transcription: string }[] } | null = null;
 
-    try {
-      const enrichRes = await fetch("/api/enrich-metadata", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videos: videosForLLM, videosMeta: videosMetaFull }),
+    if (urlsNeedEnrich.length > 0) {
+      setDownloadStatus(`Sending ${urlsNeedEnrich.length} video(s) to AI (${skipTxtCount} already enriched)...`);
+
+      const videosForLLM = urlsNeedEnrich.map((url) => {
+        const row = channelRows.find((r) => r.videoUrl === url);
+        const videoId = url.match(/\/video\/(\d+)/)?.[1] || "";
+        const transcription = allTranscriptions.get(url) || allTranscriptions.get(videoId) || "ERRO: Transcription not available";
+        return {
+          videoId: row?.videoId || "",
+          title: row?.title || "",
+          description: row?.description || "",
+          hashtags: row?.hashtags?.join(", ") || "",
+          transcription,
+        };
       });
-      enrichData = await enrichRes.json();
-      if (enrichData?.debugLogs) {
-        setDetailLogs((prev) => [...prev, ...(enrichData!.debugLogs as string[])]);
+
+      const videosMetaFull = urlsNeedEnrich.map((url) => {
+        const row = channelRows.find((r) => r.videoUrl === url);
+        const videoId = url.match(/\/video\/(\d+)/)?.[1] || "";
+        const transcription = allTranscriptions.get(url) || allTranscriptions.get(videoId) || "ERRO: Transcription not available";
+        return {
+          videoId: row?.videoId || "",
+          title: row?.title || "",
+          views: row?.views || 0,
+          likes: row?.likes || 0,
+          description: row?.description || "",
+          hashtags: row?.hashtags?.join(", ") || "",
+          videoUrl: url,
+          publishDate: row?.publishDate || "",
+          transcription,
+        };
+      });
+
+      try {
+        const enrichRes = await fetch("/api/enrich-metadata", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ videos: videosForLLM, videosMeta: videosMetaFull }),
+        });
+        enrichData = await enrichRes.json();
+        if (enrichData?.debugLogs) {
+          setDetailLogs((prev) => [...prev, ...(enrichData!.debugLogs as string[])]);
+        }
+        if (!enrichRes.ok) {
+          setDetailLogs((prev) => [...prev, `❌ [ENRICH] ${enrichData?.error || "LLM enrichment failed"}`]);
+          // Don't abort — continue with TTS/download for items that can proceed
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        setDetailLogs((prev) => [...prev, `❌ [ENRICH] AI enrichment failed: ${msg}`]);
       }
-      if (!enrichRes.ok) {
-        setError(enrichData?.error || "LLM enrichment failed");
-        setDownloadStatus(null);
-        setIsDownloadingAll(false);
-        return;
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      setError(`AI enrichment failed: ${msg}`);
-      setDownloadStatus(null);
-      setIsDownloadingAll(false);
-      return;
+    } else {
+      setDetailLogs((prev) => [...prev, `⏭️ [ENRICH] All ${selectedVideoUrls.length} video(s) already enriched — skipping AI`]);
     }
 
-    // ── Step 2.5: Generate TTS for each video ──
+    // ── Step 2.5: Generate TTS for each video (skip videos that already have .mp3) ──
     const llmVideos = enrichData?.llmVideos || [];
     let ttsOk = 0;
     let ttsSkipped = 0;
@@ -541,6 +578,14 @@ export default function Home() {
       for (let i = 0; i < llmVideos.length; i++) {
         const item = llmVideos[i];
         const rowMeta = channelRows.find((r) => r.videoId === item.videoId);
+        const itemUrl = rowMeta?.videoUrl || "";
+
+        // Skip if .mp3 already exists on disk
+        if (itemUrl && existingFiles.get(itemUrl)?.hasMp3) {
+          ttsSkipped++;
+          setDetailLogs((prev) => [...prev, `⏭️ [TTS] Skipped "${(rowMeta?.title || item.title).substring(0, 50)}" — .mp3 already exists`]);
+          continue;
+        }
 
         if (item.transcription.startsWith("ERRO:")) {
           ttsSkipped++;
@@ -583,17 +628,25 @@ export default function Home() {
       // Refresh ElevenLabs credits after TTS
       fetchElevenLabsCredits();
 
-      if (ttsOk > 0) setDetailLogs((prev) => [...prev, `🔊 [TTS] ${ttsOk} audio(s) generated, ${ttsSkipped} skipped, ${ttsFailed} error(s)`]);
+      if (ttsOk > 0 || ttsSkipped > 0) setDetailLogs((prev) => [...prev, `🔊 [TTS] ${ttsOk} generated, ${ttsSkipped} skipped, ${ttsFailed} error(s)`]);
     }
 
-    // ── Step 3: Download each video individually ──
+    // ── Step 3: Download each video individually (skip videos that already have .mp4) ──
     let totalOk = 0;
     let totalFailed = 0;
+    let totalSkipped = 0;
     const meta = getSelectedMeta();
 
     for (let i = 0; i < selectedVideoUrls.length; i++) {
       const url = selectedVideoUrls[i];
       const title = meta[i]?.title || "";
+
+      // Skip if .mp4 already exists on disk
+      if (existingFiles.get(url)?.hasMp4) {
+        totalSkipped++;
+        setDetailLogs((prev) => [...prev, `⏭️ [DOWNLOAD] Skipped "${title.substring(0, 50)}" — .mp4 already exists`]);
+        continue;
+      }
 
       setDownloadStatus(`Downloading video ${i + 1} of ${selectedVideoUrls.length}...`);
 
@@ -635,7 +688,11 @@ export default function Home() {
       }
     }
 
-    setDownloadStatus(`Download completed: ${totalOk} file(s) succeeded, ${totalFailed} failure(s). Folder: downloads/`);
+    const dlParts: string[] = [];
+    if (totalOk > 0) dlParts.push(`${totalOk} downloaded`);
+    if (totalSkipped > 0) dlParts.push(`${totalSkipped} skipped`);
+    if (totalFailed > 0) dlParts.push(`${totalFailed} failed`);
+    setDownloadStatus(`Download completed: ${dlParts.join(", ")}. Folder: downloads/`);
     setIsDownloadingAll(false);
   };
 
